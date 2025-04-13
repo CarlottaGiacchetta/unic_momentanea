@@ -80,6 +80,7 @@ class ScaleMAE(pl.LightningModule):
 
 
     def forward(self, x):
+        '''
         x = x[:, self.bands, :, :] # x: (B, 12, H, W) → (B, 3, H, W)
         x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False) # x: (B, 3, 120, 120) → (B, 3, 224, 224)
 
@@ -99,7 +100,7 @@ class ScaleMAE(pl.LightningModule):
         else: 
             mean = torch.tensor([2193.2919921875, 1568.2115478515625, 997.715087890625], device=x.device).view(1, 3, 1, 1)
             std = torch.tensor([1369.3717041015625,   1063.9197998046875, 806.8846435546875], device=x.device).view(1, 3, 1, 1)
-            x = (x - mean) / std
+            x = (x - mean) / std'''
 
         features = self.backbone.forward_features(x) # (B, 197, D)
         cls_token = features[:, 0, :]  # (B, D)
@@ -147,15 +148,10 @@ class ScaleMAE(pl.LightningModule):
     def forward_features(self, x):
         x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
         
-        print('\n\nx')
-        print(x, x.shape)
+        
         features = self.backbone.forward_features(x)  # (B, 1+N, D)
-        print('\n\nfeatures forward')
-        print(features)
 
-        features1 = self.backbone(x)  # (B, 1+N, D)
-        print('\n\nfeatures')
-        print(features1)
+        
         
         cls_token = features[:, 0]       # (B, D)
         patch_tokens = features[:, 1:]   # (B, N, D)

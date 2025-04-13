@@ -23,24 +23,21 @@ def get_teacher_output(
     teacher_output = defaultdict(dict)
 
     for tname in teachers.keys():
+        image_copy = image
         if tname == 'scalemae_veg':
-            print('sono nel teacher ', tname)
-            image = image[:, [4, 5, 6], :, :] #FUNZIONA SOLO PER RGB
-            mean = torch.tensor([942.7476806640625, 1769.8486328125, 2049.475830078125], device=image.device).view(1, 3, 1, 1)
-            std = torch.tensor([727.5784301757812,   1087.4288330078125, 1261.4302978515625], device=image.device).view(1, 3, 1, 1)
-            image = (image - mean) / std
+            image_copy = image_copy[:, [4, 5, 6], :, :] #FUNZIONA SOLO PER RGB
+            mean = torch.tensor([942.7476806640625, 1769.8486328125, 2049.475830078125], device=image_copy.device).view(1, 3, 1, 1)
+            std = torch.tensor([727.5784301757812,   1087.4288330078125, 1261.4302978515625], device=image_copy.device).view(1, 3, 1, 1)
+            image_copy = (image_copy - mean) / std
 
         elif tname == 'scalemae_rgb':
-            print('sono nel teacher ', tname)
-            image = image[:, [4, 3, 2], :, :] #FUNZIONA SOLO PER RGB
-            mean = torch.tensor([942.7476806640625, 588.4096069335938, 614.0556640625], device=image.device).view(1, 3, 1, 1)
-            std = torch.tensor([727.5784301757812,   684.56884765625, 603.2968139648438], device=image.device).view(1, 3, 1, 1)
-            image = (image - mean) / std
+            image_copy = image_copy[:, [4, 3, 2], :, :] #FUNZIONA SOLO PER RGB
+            mean = torch.tensor([942.7476806640625, 588.4096069335938, 614.0556640625], device=image_copy.device).view(1, 3, 1, 1)
+            std = torch.tensor([727.5784301757812,   684.56884765625, 603.2968139648438], device=image_copy.device).view(1, 3, 1, 1)
+            image_copy = (image_copy - mean) / std
         
-        tout_dict = teachers[tname].forward_features(image) #forward_features(image) per ottenere l'output del ViT (prima della testa lineare)
-        print('\n\n\ntout_dict')
-        print(tout_dict)
-
+        tout_dict = teachers[tname].forward_features(image_copy) #forward_features(image) per ottenere l'output del ViT (prima della testa lineare)
+        
 
         for ttype in ["cls", "patch"]:
             key = "x_norm_{}{}".format(ttype, "token" if ttype == "cls" else "tokens")

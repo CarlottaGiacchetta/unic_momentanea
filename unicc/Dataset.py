@@ -95,14 +95,6 @@ class CustomBigEarthNetDataModule(NonGeoDataModule):
                 **self.kwargs
             )
 
-def min_max_fn(x):
-    min_val = x.amin(dim=(2, 3), keepdim=True)  # per ogni immagine
-    max_val = x.amax(dim=(2, 3), keepdim=True)
-    return (x - min_val) / (max_val - min_val + 1e-8)
-
-class ResizeTo224(torch.nn.Module):
-    def forward(self, x):
-        return F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
 
 
 def carica_dati(args, setup = "fit"):
@@ -114,17 +106,16 @@ def carica_dati(args, setup = "fit"):
             CustomLambda(min_max_fn),
             K.RandomHorizontalFlip(p=0.5),
             K.RandomVerticalFlip(p=0.5),
-            K.RandomRotation(degrees=90.0, p=0.5),
-            ResizeTo224()
+            K.RandomRotation(degrees=90.0, p=0.5)
         ]
 
         if args.fintuning_bands == "rgb":
             transforms.append(K.RandomGrayscale(p=0.05))
+        train_transform = AugmentationSequential(*transforms, data_keys=["image"])
 
     else: 
-        transforms = [ResizeTo224()]
-    print(transforms)
-    train_transform = AugmentationSequential(*transforms, data_keys=["image"])
+        train_transform = None
+    
 
     dm = CustomBigEarthNetDataModule(
             root=args.data_dir,
@@ -144,9 +135,11 @@ def carica_dati(args, setup = "fit"):
     if setup == "fit":
         train = dm.train_dataset
         train_loader = dm.train_dataloader()
+        print(train)
         print('--creato train loader')
 
         validation = dm.val_dataset
+        print(validation)
         validation_loader = dm.val_dataloader()
         print('--creato validation loader')
         

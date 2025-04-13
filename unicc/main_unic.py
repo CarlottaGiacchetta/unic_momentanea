@@ -314,13 +314,13 @@ def main(args):
         if fp16_scaler is not None:
             save_dict["fp16_scaler"] = fp16_scaler.state_dict()
 
-        if dist.get_rank() == 0:
-            torch.save(save_dict, os.path.join(args.output_dir, "checkpoint.pth"))
-            if args.saveckpt_freq and epoch % args.saveckpt_freq == 0:
-                shutil.copy(
-                    os.path.join(args.output_dir, "checkpoint.pth"),
-                    os.path.join(args.output_dir, f"checkpoint_{epoch:04}.pth"),
-                )
+        
+        torch.save(save_dict, os.path.join(args.output_dir, "checkpoint.pth"))
+        if args.saveckpt_freq and epoch % args.saveckpt_freq == 0:
+            shutil.copy(
+                os.path.join(args.output_dir, "checkpoint.pth"),
+                os.path.join(args.output_dir, f"checkpoint_{epoch:04}.pth"),
+            )
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -477,12 +477,6 @@ def evaluate(
     for k, v in metric_dict.items():
         logger.info("{}: {}".format(k, v))'''
 
-    ext_logger.log(
-        metric_dict,
-        epoch + 1,
-        prefix="test/epoch/",
-        save_path=os.path.join(args.output_dir, "log_test.txt"),
-    )
 
 
     print('FINE EVAL')
