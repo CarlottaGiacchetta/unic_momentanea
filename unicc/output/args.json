@@ -1,7 +1,7 @@
 {
     "arch": "vit_base",
     "bands": "s2",
-    "batch_size": 8,
+    "batch_size": 128,
     "batch_size_per_gpu": 128,
     "clip_grad": 0.0,
     "data_dir": "D:\\tesi_carlotta\\data",

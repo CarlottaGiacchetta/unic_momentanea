@@ -17,7 +17,7 @@ class UNIC(nn.Module):
         self.lp = lp
 
     def forward(self, image):
-        image = image[:, [4, 3, 2], :, :] #QUII MODIFICARE PER GESTIRE BENE TUTTE LE BANDE
+        #image = image[:, [4, 3, 2], :, :] #QUII MODIFICARE PER GESTIRE BENE TUTTE LE BANDE
         image = F.interpolate(image, size=(224, 224), mode='bilinear', align_corners=False)
         x, num_register_tokens = self.encoder.prepare_tokens_with_masks(image)
         
@@ -176,6 +176,7 @@ def _build_encoder_from_args(args):
         patch_size=args.patch_size,
         drop_path_rate=args.drop_path_rate,
         img_size=args.image_size,
+        in_chans=12
     )
 
 

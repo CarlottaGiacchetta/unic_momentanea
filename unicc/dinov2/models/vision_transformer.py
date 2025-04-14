@@ -376,9 +376,73 @@ def init_weights_vit_timm(module: nn.Module, name: str = ""):
             nn.init.zeros_(module.bias)
 
 
+import torch
+import torch.nn as nn
+
 def get_model(arch="vit_base", **kwargs):
-    model = globals().get(arch)(**kwargs)
+    """
+    Restituisce un modello ViT con patch embedding modificato per accettare un numero
+    arbitrario di canali in ingresso. Se il parametro in_channels viene specificato e
+    diverso da 3 (RGB), la convoluzione del patch embedding verrà adattata:
+      - I pesi relativi ai primi 3 canali vengono copiati dal modello pre-esistente.
+      - I pesi per le bande aggiuntive vengono inizializzati a zero.
+      
+    Parametri:
+      arch (str): Nome dell'architettura ViT da utilizzare (ad esempio "vit_base").
+      kwargs: Argomenti aggiuntivi, tra cui 'in_channels' che indica il numero di canali in ingresso.
+    
+    Ritorna:
+      model: Il modello ViT modificato.
+    """
+    # Recupera la classe del modello dalla variabile globale
+    model_class = globals().get(arch)
+    if model_class is None:
+        raise ValueError(f"Architettura {arch} non trovata tra le definizioni globali.")
+    
+    # Costruisce il modello utilizzando gli argomenti passati
+    model = model_class(**kwargs)
+    
+    # Estrae il numero di canali in ingresso (default 3 per RGB)
+    in_channels = kwargs.get("in_chans", 3)
+    
+    # Se il numero di canali è diverso da RGB, modifica il patch embedding
+    if in_channels != 3:
+        if hasattr(model, "patch_embed") and hasattr(model.patch_embed, "proj"):
+            # Recupera il layer convoluzionale originario
+            conv = model.patch_embed.proj
+            old_weight = conv.weight.data
+            original_in_channels = conv.in_channels  # tipicamente 3
+            out_channels = conv.out_channels
+            kernel_size = conv.kernel_size
+            stride = conv.stride
+            padding = conv.padding
+            
+            # Crea un nuovo layer convoluzionale con in_channels aggiornato
+            new_conv = nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=(conv.bias is not None)
+            )
+            with torch.no_grad():
+                # Copia i pesi per i canali RGB
+                new_conv.weight[:, :original_in_channels, :, :] = old_weight
+                # Inizializza a zero i pesi per i canali aggiuntivi
+                if in_channels > original_in_channels:
+                    new_conv.weight[:, original_in_channels:, :, :].zero_()
+                # Se presente, copia il bias
+                if conv.bias is not None:
+                    new_conv.bias.data.copy_(conv.bias.data)
+            
+            # Sostituisce il layer di proiezione nel patch embedding
+            model.patch_embed.proj = new_conv
+        else:
+            raise ValueError("Il modello non possiede un patch embedding con attributo 'proj'.")
+    
     return model
+
 
 
 def vit_tiny(patch_size=16, num_register_tokens=0, **kwargs):

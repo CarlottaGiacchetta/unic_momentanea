@@ -1,7 +1,7 @@
 encoder.cls_token - [1, 1, 768] - Regularized
 encoder.pos_embed - [1, 197, 768] - Regularized
 encoder.mask_token - [1, 768] - Regularized
-encoder.patch_embed.proj.weight - [768, 3, 16, 16] - Regularized
+encoder.patch_embed.proj.weight - [768, 12, 16, 16] - Regularized
 encoder.patch_embed.proj.bias - [768] - Not Regularized
 encoder.blocks.0.0.norm1.weight - [768] - Not Regularized
 encoder.blocks.0.0.norm1.bias - [768] - Not Regularized
