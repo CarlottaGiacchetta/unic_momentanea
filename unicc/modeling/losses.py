@@ -40,12 +40,13 @@ def loss_per_teacher(
     metric_dict={},
 ) -> Dict[str, torch.Tensor]:
     loss_pt = {}
-
+    
     for tname in teacher_output.keys():
 
         tout_dict = teacher_output[tname]
         sout_dict = student_output[tname]
         losses = []
+        
 
         for ttype in tout_dict.keys():
             tout = tout_dict[ttype]

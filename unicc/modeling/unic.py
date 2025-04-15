@@ -30,6 +30,7 @@ class UNIC(nn.Module):
             output_patch.append(x[:, 1 + num_register_tokens :, :])
 
         out = self.lp(output_cls, output_patch)
+        
 
         return out
 

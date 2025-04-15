@@ -59,7 +59,7 @@ def get_args():
     parser.add_argument(
         "--teachers",
         type=str,
-        default="scalemae_rgb",#, scalemae_veg",
+        default="scalemae_rgb,scalemae_veg",#, scalemae_veg",
         help="Comma-separated list of teacher names.",
     )
     parser.add_argument(
@@ -235,10 +235,11 @@ def main(args):
 
     logger.info("Loading teachers ...")
     teachers, teacher_ft_stats = build_teachers(args.teachers)
+    
 
     logger.info("Creating student model")
     model = build_student_from_args(args)
-    print(model)
+    
     model = model.cuda()
     
     #utils.save_model_defn(model.module, os.path.join(args.output_dir, "model_defn.txt"))
