@@ -16,11 +16,10 @@ from torchvision.datasets import ImageFolder
 
 import utils
 from modeling.unic import build_student_from_args
-from teachers.builder import build_teachers
-from teachers import get_teacher_output
+from teachers import build_teachers, get_teacher_output
 from modeling.losses import unic_loss
-#from dinov2.logging import setup_logging, ExternalLogger, MetricLogger
-#from dinov2.distributed import get_global_rank
+from dinov2.logging import setup_logging, ExternalLogger, MetricLogger
+from dinov2.distributed import get_global_rank
 from Dataset import carica_dati
 
 
@@ -192,6 +191,12 @@ def get_args():
         help="Number of data loading workers per GPU.",
     )
     parser.add_argument(
+        "--local_rank",
+        default=0,
+        type=int,
+        help="Please ignore this argument; No need to set it manually.",
+    )
+    parser.add_argument(
         "--transform",
         default=False,
         type=bool,
@@ -219,6 +224,7 @@ def get_args():
     args = parser.parse_args()
 
     args.teachers = sorted(args.teachers.split(","))
+    args.num_cpus = len(os.sched_getaffinity(0))
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -227,8 +233,14 @@ def get_args():
 logger = logging.getLogger()
 
 def main(args):
+    utils.init_distributed_mode(args)
+    utils.fix_random_seeds(args.seed + get_global_rank())
     torch.backends.cuda.matmul.allow_tf32 = True
+    cudnn.benchmark = True
+
+    setup_logging(os.path.join(args.output_dir, "log.txt"), level=logging.INFO)
     utils.print_program_info(args)
+    ext_logger = ExternalLogger(args.output_dir)
 
     logger.info("Creating data loaders ...")
     _, train_loader, _, val_loader = carica_dati(args)
@@ -239,10 +251,11 @@ def main(args):
 
     logger.info("Creating student model")
     model = build_student_from_args(args)
-    
     model = model.cuda()
-    
-    #utils.save_model_defn(model.module, os.path.join(args.output_dir, "model_defn.txt"))
+    model = nn.parallel.DistributedDataParallel(
+        model, device_ids=[args.gpu], find_unused_parameters=True
+    )
+    utils.save_model_defn(model.module, os.path.join(args.output_dir, "model_defn.txt"))
 
     optimizer = torch.optim.AdamW(
         utils.get_params_groups(
@@ -283,7 +296,7 @@ def main(args):
     start_time = time.time()
 
     for epoch in range(start_epoch, args.epochs):
-        #train_loader.sampler.set_epoch(epoch)
+        train_loader.sampler.set_epoch(epoch)
 
         train_one_epoch(
             model,
@@ -293,6 +306,7 @@ def main(args):
             optimizer,
             epoch,
             fp16_scaler,
+            ext_logger,
             args,
         )
 
@@ -302,7 +316,7 @@ def main(args):
             teacher_ft_stats,
             val_loader,
             epoch,
-            #ext_logger,
+            ext_logger,
             args,
         )
 
@@ -337,16 +351,29 @@ def train_one_epoch(
     optimizer,
     epoch,
     fp16_scaler,
+    ext_logger,
     args,
 ):
     logger.info("-" * 50)
     logger.info("Starting training epoch {}".format(epoch))
 
+    metrics_file = os.path.join(args.output_dir, "metrics_training.json")
+    metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
     header = "Training - Epoch: [{}/{}]".format(epoch, args.epochs)
 
     model.train()
 
-    for it, sample in enumerate(data_loader):
+    for it, sample in enumerate(
+        metric_logger.log_every(
+            data_loader,
+            10,
+            header,
+            start_iteration=epoch * len(data_loader),
+            ext_logger=ext_logger,
+            ext_logger_prefix="train/batch/",
+        )
+    ):
+
         image = sample["image"]
         target = sample["label"]
 
@@ -372,15 +399,6 @@ def train_one_epoch(
                 teacher_output = get_teacher_output(
                     image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it]
                 )
-
-            '''print('\n\n\nstudent')
-            print(student_output)
-            print('cls', student_output['scalemae_rgb']['cls'].shape)
-            print('patch', student_output['scalemae_rgb']['patch'].shape)
-            print('\n\n\nteacher')
-            print(teacher_output)
-            print('cls', teacher_output['scalemae_rgb']['cls'].shape)
-            print('patch', teacher_output['scalemae_rgb']['patch'].shape)'''
 
             loss, _ = unic_loss(
                 student_output,
@@ -420,18 +438,18 @@ def train_one_epoch(
                 }
             )
 
-    '''metric_logger.synchronize_between_processes()
-    metric_dict = {k: meter.global_avg for k, meter in metric_logger.meters.items()}'''
+    metric_logger.synchronize_between_processes()
+    metric_dict = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
     logger.info("Averaged train stats:")
     for k, v in metric_dict.items():
         logger.info("{}: {}".format(k, v))
 
-    '''ext_logger.log(
+    ext_logger.log(
         metric_dict,
         epoch + 1,
         prefix="train/epoch/",
         save_path=os.path.join(args.output_dir, "log_train.txt"),
-    )'''
+    )
 
     return metric_dict
 
@@ -443,15 +461,17 @@ def evaluate(
     teacher_ft_stats,
     data_loader,
     epoch,
-    #ext_logger,
+    ext_logger,
     args,
 ):
-    #metric_logger = MetricLogger(delimiter="  ")
+    metric_logger = MetricLogger(delimiter="  ")
     header = "Test - Epoch: [{}/{}]".format(epoch, args.epochs)
 
     model.eval()
 
-    for it, sample in enumerate(data_loader):
+    for it, sample in enumerate(
+        metric_logger.log_every(data_loader, 10, header)
+    ):
         image = sample["image"]
         target = sample["label"]
 
@@ -470,18 +490,21 @@ def evaluate(
             args.t_drop_prob,
             metric_dict=metric_dict,
         )
-        #metric_logger.update(**metric_dict)
+        metric_logger.update(**metric_dict)
 
-    #metric_logger.synchronize_between_processes()
-    #metric_dict = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+    metric_logger.synchronize_between_processes()
+    metric_dict = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
-    '''logger.info("Averaged test stats:")
+    logger.info("Averaged test stats:")
     for k, v in metric_dict.items():
-        logger.info("{}: {}".format(k, v))'''
+        logger.info("{}: {}".format(k, v))
 
-
-
-    print('FINE EVAL')
+    ext_logger.log(
+        metric_dict,
+        epoch + 1,
+        prefix="test/epoch/",
+        save_path=os.path.join(args.output_dir, "log_test.txt"),
+    )
     return metric_dict
 
 

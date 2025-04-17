@@ -19,7 +19,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-#from dinov2 import distributed
+from dinov2 import distributed
 
 
 logger = logging.getLogger()
@@ -309,9 +309,7 @@ def standard_normalize(data, mean_ema=None, std_ema=None, ema_momentum=0.1, eps=
     ndims = len(data.shape)
     assert ndims in (2, 3), "Data must be either 2D or 3D, received: {}".format(ndims)
 
-    #all_data = concat_all_gather(data.contiguous())
-    all_data = data.contiguous()
-
+    all_data = concat_all_gather(data.contiguous())
 
     # Compute mean and std over the first dimension.
     # If data is 3D, then compute the mean and std
