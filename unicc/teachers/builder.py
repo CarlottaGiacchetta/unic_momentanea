@@ -5,7 +5,7 @@ from typing import List, Dict, Union
 
 import torch
 
-from .config import TEACHER_CFG
+from .teachers_config import TEACHER_CFG
 
 
 logger = logging.getLogger()

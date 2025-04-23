@@ -1,24 +1,21 @@
-#from .vit_dino import dino_vitbase
-#from .vit_deit3 import deit3_vitbase
-#from .vit_dbotft import dbotft_vitbase
+import torch
 
-from teachers.ScaleMae import scalemae_RGB, scalemae_VEG
+CONFIG = {
+            "rgb": {
+                "bands": [4, 3, 2],
+                "mean": torch.tensor([942.75, 588.41, 614.06]).view(1, 3, 1, 1),
+                "std": torch.tensor([727.58, 684.57, 603.30]).view(1, 3, 1, 1),
+            },
+            "veg": {
+                "bands": [4, 5, 6],
+                "mean": torch.tensor([942.75, 1769.85, 2049.48]).view(1, 3, 1, 1),
+                "std": torch.tensor([727.58, 1087.43, 1261.43]).view(1, 3, 1, 1),
+            },
+            "geo": {
+                "bands": [7, 10, 11],
+                "mean": torch.tensor([2193.2919921875, 1568.2117919921875, 997.715087890625]).view(1, 3, 1, 1),
+                "std": torch.tensor([1369.3717041015625, 1063.9197998046875, 806.8846435546875]).view(1, 3, 1, 1),
+            },
+            
 
-TEACHER_CFG = {
-    "scalemae_rgb": {
-        "loader": scalemae_RGB,
-        "ckpt_path": "/raid/home/rsde/cgiacchetta_unic/unic_momentanea/models/best-checkpoint_rgb.ckpt",
-        "ckpt_key": "model",
-        "num_features": 1024,
-        "resolution": 224,
-    },
-    "scalemae_veg": {
-        "loader": scalemae_VEG,
-        "ckpt_path": "/raid/home/rsde/cgiacchetta_unic/unic_momentanea/models/best-checkpoint_veg.ckpt",
-        "ckpt_key": "model",
-        "num_features": 1024,
-        "resolution": 224,
-        
-    },
-
-}
+        }

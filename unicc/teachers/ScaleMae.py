@@ -1,40 +1,50 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import argparse
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 from torchmetrics.classification import MultilabelAveragePrecision
 from torchgeo.models.scale_mae import scalemae_large_patch16, ScaleMAELarge16_Weights
+from teachers.config import CONFIG
 
 
 
 
 class ScaleMAE(pl.LightningModule):
 
-    def __init__(self, args):
+    def __init__(self, args=None):
         super().__init__()
-        self.lr = args.lr
-        self.wd = args.wd
-        self.save_hyperparameters()
+
+        # Supporta sia Namespace che dict, e fallback se args è None
+        args = vars(args) if isinstance(args, argparse.Namespace) else args or {}
+
+        # Parametri con valori di default per test
+        self.lr = args.get("lr", 1e-3)
+        self.wd = args.get("wd", 1e-4)
+        self.image_size = args.get("image_size", 224)
+        self.num_classes = args.get("num_classes", 19)
+        self.use_weight = args.get("use_weight", False)
+        self.finetuning_bands = args.get("finetuning_bands", "rgb")
+
+        self.save_hyperparameters()  # salva quelli passati
+
+        # Backbone
         weights = ScaleMAELarge16_Weights.FMOW_RGB
         self.backbone = scalemae_large_patch16(weights=weights)
-        self.classifier = nn.Linear(self.backbone.embed_dim, args.num_classes)
+        self.classifier = nn.Linear(self.backbone.embed_dim, self.num_classes)
 
-        self.metric = MultilabelAveragePrecision(num_labels=args.num_classes)
-        if args.fintuning_bands == "rgb":
-            self.bands = [4, 3, 2] #DA RIFARE
-        elif args.fintuning_bands == "vegetations":
-            self.bands = [4, 5, 6] 
-        elif args.fintuning_bands == "rocks":
-            print(len(args.fintuning_bands))
-            self.bands = [7, 10, 11] 
-        else: 
-            print('attenzione numero di bande non riconosciuto!!!')
+        # Metriche
+        self.metric = MultilabelAveragePrecision(num_labels=self.num_classes)
 
+        # Bande e normalizzazione
+        self.bands = CONFIG[self.finetuning_bands]["bands"]
+        self.mean = CONFIG[self.finetuning_bands]["mean"]
+        self.std = CONFIG[self.finetuning_bands]["std"]
 
-        self.num_classes = args.num_classes
+        # Class weights
         self.class_weights = torch.ones(self.num_classes)
-        if args.use_weight == True:
+        if self.use_weight:
             self.class_weights = self._get_class_weights()
         
     
@@ -80,27 +90,6 @@ class ScaleMAE(pl.LightningModule):
 
 
     def forward(self, x):
-        '''
-        x = x[:, self.bands, :, :] # x: (B, 12, H, W) → (B, 3, H, W)
-        x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False) # x: (B, 3, 120, 120) → (B, 3, 224, 224)
-
-        x = x[:, self.bands, :, :] # x: (B, 12, H, W) → (B, 3, H, W)
-        x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False) # x: (B, 3, 120, 120) → (B, 3, 224, 224)
-        
-        if self.bands == [4, 5, 6] : #veg
-            mean = torch.tensor([942.7476806640625, 1769.8486328125, 2049.475830078125], device=x.device).view(1, 3, 1, 1)
-            std = torch.tensor([727.5784301757812,   1087.4288330078125, 1261.4302978515625], device=x.device).view(1, 3, 1, 1)
-            x = (x - mean) / std
-
-        elif self.bands == [4, 3, 2]: #rgb
-            mean = torch.tensor([942.7476806640625, 588.4096069335938, 614.0556640625], device=x.device).view(1, 3, 1, 1)
-            std = torch.tensor([727.5784301757812,   684.56884765625, 603.2968139648438], device=x.device).view(1, 3, 1, 1)
-            x = (x - mean) / std
-        
-        else: 
-            mean = torch.tensor([2193.2919921875, 1568.2115478515625, 997.715087890625], device=x.device).view(1, 3, 1, 1)
-            std = torch.tensor([1369.3717041015625,   1063.9197998046875, 806.8846435546875], device=x.device).view(1, 3, 1, 1)
-            x = (x - mean) / std'''
 
         features = self.backbone.forward_features(x) # (B, 197, D)
         cls_token = features[:, 0, :]  # (B, D)
@@ -176,6 +165,12 @@ def scalemae_RGB(checkpoint_path):
     return model
 
 def scalemae_VEG(checkpoint_path):
+    model = ScaleMAE.load_from_checkpoint(checkpoint_path)
+    model.eval()
+    model.to("cuda" if torch.cuda.is_available() else "cpu")
+    return model
+    
+def scalemae_GEO(checkpoint_path):
     model = ScaleMAE.load_from_checkpoint(checkpoint_path)
     model.eval()
     model.to("cuda" if torch.cuda.is_available() else "cpu")
