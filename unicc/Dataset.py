@@ -95,6 +95,10 @@ class CustomBigEarthNetDataModule(NonGeoDataModule):
                 **self.kwargs
             )
 
+def min_max_fn(x):
+    min_val = x.amin(dim=(2, 3), keepdim=True)  # per ogni immagine
+    max_val = x.amax(dim=(2, 3), keepdim=True)
+    return (x - min_val) / (max_val - min_val + 1e-8)
 
 
 def carica_dati(args, setup = "fit"):

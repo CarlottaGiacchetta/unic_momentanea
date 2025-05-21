@@ -58,7 +58,7 @@ def get_args():
     parser.add_argument(
         "--teachers",
         type=str,
-        default="scalemae_rgb,scalemae_veg",#, scalemae_veg",
+        default="scalemae_rgb,scalemae_veg,scalemae_geo",#, scalemae_veg",
         help="Comma-separated list of teacher names.",
     )
     parser.add_argument(
@@ -220,6 +220,19 @@ def get_args():
         default=19,
         help="Num of classes for classification of BigEarthNet.",
     )
+    parser.add_argument(
+        "--in_chans",
+        type=int,
+        default=12,
+        help="Num of classes for classification of BigEarthNet.",
+    )
+    
+    parser.add_argument(
+        "--dist_url",
+        default="env://",
+        type=str,
+        help="Url used to set up distributed training.",
+    )
 
     args = parser.parse_args()
 
@@ -243,7 +256,10 @@ def main(args):
     ext_logger = ExternalLogger(args.output_dir)
 
     logger.info("Creating data loaders ...")
-    _, train_loader, _, val_loader = carica_dati(args)
+    train, train_loader, validation, val_loader = carica_dati(args)
+    
+    print(train, train_loader)
+    print(validation, val_loader)
 
     logger.info("Loading teachers ...")
     teachers, teacher_ft_stats = build_teachers(args.teachers)
@@ -288,6 +304,19 @@ def main(args):
     )
 
     to_restore = {"epoch": 0, "teacher_ft_stats": teacher_ft_stats}
+    checkpoint_path = os.path.join(args.output_dir, "checkpoint.pth")
+    if os.path.exists(checkpoint_path):
+        logger.info(f"Loading checkpoint from {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location="cuda")
+        model.load_state_dict(checkpoint["model"], strict=False)
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        if fp16_scaler is not None and "fp16_scaler" in checkpoint:
+            fp16_scaler.load_state_dict(checkpoint["fp16_scaler"])
+        to_restore["epoch"] = checkpoint["epoch"]
+        to_restore["teacher_ft_stats"] = checkpoint["teacher_ft_stats"]
+        logger.info(f"Resuming training from epoch {to_restore['epoch']}")
+    else:
+        logger.warning(f"No checkpoint found at {checkpoint_path}. Starting from scratch.")
     
     start_epoch = to_restore["epoch"]
     teacher_ft_stats = to_restore["teacher_ft_stats"]
@@ -296,7 +325,9 @@ def main(args):
     start_time = time.time()
 
     for epoch in range(start_epoch, args.epochs):
-        train_loader.sampler.set_epoch(epoch)
+        if hasattr(train_loader.sampler, 'set_epoch'):
+          train_loader.sampler.set_epoch(epoch)
+
 
         train_one_epoch(
             model,
@@ -408,6 +439,8 @@ def train_one_epoch(
                 args.t_drop_prob,
                 metric_dict=metric_dict,
             )
+            
+            print('loss: ', loss)
 
         if not math.isfinite(loss.item()):
             logger.info("Loss is {}, stopping training".format(loss.item()))

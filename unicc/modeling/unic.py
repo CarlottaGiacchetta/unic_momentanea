@@ -17,8 +17,27 @@ class UNIC(nn.Module):
         self.lp = lp
 
     def forward(self, image):
-        #image = image[:, [4, 3, 2], :, :] #QUII MODIFICARE PER GESTIRE BENE TUTTE LE BANDE
+        mean = torch.tensor([
+            360.6375, 438.3721, 614.0557, 588.4096, 942.7473,
+            1769.8485, 2049.4758, 2193.2920, 2235.4866, 2241.0911,
+            1568.2118, 997.7151
+        ]).view(1, 12, 1, 1)
+        
+        std = torch.tensor([
+            563.1734, 607.0269, 603.2968, 684.5688, 727.5784,
+            1087.4288, 1261.4303, 1369.3717, 1342.4904,
+            1294.3555, 1063.9198, 806.8846
+        ]).view(1, 12, 1, 1)
+
+
         image = F.interpolate(image, size=(224, 224), mode='bilinear', align_corners=False)
+        
+        image = image[:, [2,3,4,5,6,7,10,11], :]
+        std = std[:, [2,3,4,5,6,7,10,11], :]
+        mean = mean[:, [2,3,4,5,6,7,10,11], :]
+
+        image = (image - mean.to(image.device)) / std.to(image.device)
+        
         x, num_register_tokens = self.encoder.prepare_tokens_with_masks(image)
         
         output_cls = [x[:, 0, :]]
@@ -177,7 +196,7 @@ def _build_encoder_from_args(args):
         patch_size=args.patch_size,
         drop_path_rate=args.drop_path_rate,
         img_size=args.image_size,
-        in_chans=12
+        in_chans=args.in_chans
     )
 
 
