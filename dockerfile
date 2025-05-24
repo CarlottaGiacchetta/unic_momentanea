@@ -17,4 +17,4 @@ USER $USER
 RUN  pip install torchgeo 
 # RUN  pip install tim 
 
-CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "10", "--in_chans", "8"]
+CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "10", "--in_chans", "8", "--teachers", "scalemae_rgb"]
