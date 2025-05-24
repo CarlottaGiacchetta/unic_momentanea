@@ -446,7 +446,6 @@ def train_one_epoch(
                 metric_dict=metric_dict,
             )
             
-            print('loss: ', loss)
 
         if not math.isfinite(loss.item()):
             logger.info("Loss is {}, stopping training".format(loss.item()))

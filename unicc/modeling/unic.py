@@ -227,13 +227,20 @@ def build_student_from_args(args):
     encoder = _build_encoder_from_args(args)
 
     from teachers import TEACHER_CFG
+    print('check nel file unic buildstudent bla bla', args.concat)
+    if args.concat:
+        head_dims = {
+            "mergedFeatures": TEACHER_CFG["scalemae_rgb"]["num_features"]  # o metti a mano il valore corretto
+        }
+    else:
+        head_dims={
+            tname: TEACHER_CFG[tname.strip()]["num_features"] for tname in args.teachers
+        }
 
     lp_args = eval(args.lp_args)
     lp = LP(
         input_dim=encoder.embed_dim,
-        head_dims={
-            tname: TEACHER_CFG[tname.strip()]["num_features"] for tname in args.teachers
-        },
+        head_dims=head_dims,
         n_encoder_blocks=encoder.n_blocks,
         **lp_args,
     )

@@ -76,6 +76,6 @@ def get_teacher_output(
             "patch": torch.mean(torch.stack(patch_list, dim=0), dim=0)
         }
     
-    print(teacher_output)
+
           
     return teacher_output
