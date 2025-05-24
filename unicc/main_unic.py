@@ -517,7 +517,7 @@ def evaluate(
         target = target.cuda(non_blocking=True)
 
         student_output = model(image)
-        teacher_output = get_teacher_output(image, teachers, teacher_ft_stats, 0.0)
+        teacher_output = get_teacher_output(image, teachers, teacher_ft_stats, 0.0, args.concat)
 
         metric_dict = {}
         unic_loss(
