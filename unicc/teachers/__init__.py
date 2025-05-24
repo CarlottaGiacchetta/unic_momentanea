@@ -18,9 +18,13 @@ def get_teacher_output(
     teachers: List[str],
     teacher_ft_stats: Dict[str, Dict[str, Dict[str, torch.Tensor]]],
     teacher_ft_stat_ema_momentum: float = 0.0,
+    concat: bool = False
 ) -> Dict[str, Dict[str, torch.Tensor]]:
 
     teacher_output = defaultdict(dict)
+
+    cls_list = []
+    patch_list = []
 
     for tname in teachers.keys():
         image_copy = image
@@ -55,7 +59,23 @@ def get_teacher_output(
                 ema_momentum=teacher_ft_stat_ema_momentum,
             )
 
+            if concat == True:
+                # Salva per il calcolo della media
+                if ttype == "cls":
+                    cls_list.append(tout)
+                elif ttype == "patch":
+                    patch_list.append(tout)
 
             teacher_output[tname][ttype] = tout
+
+    # Calcola media tra tutti i teacher per cls e patch
+    if cls_list and patch_list:
+        teacher_output = {"mergedFeatures" : {}}
+        teacher_output["mergedFeatures"] = {
+            "cls": torch.mean(torch.stack(cls_list, dim=0), dim=0),
+            "patch": torch.mean(torch.stack(patch_list, dim=0), dim=0)
+        }
+    
+    print(teacher_output)
           
     return teacher_output

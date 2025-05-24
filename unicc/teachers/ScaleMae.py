@@ -26,6 +26,7 @@ class ScaleMAE(pl.LightningModule):
         self.num_classes = args.get("num_classes", 19)
         self.use_weight = args.get("use_weight", False)
         self.finetuning_bands = args.get("finetuning_bands", "rgb")
+        self.concat = args.get("concat", False)
 
         self.save_hyperparameters()  # salva quelli passati
 

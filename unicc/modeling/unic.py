@@ -33,9 +33,9 @@ class UNIC(nn.Module):
         image = F.interpolate(image, size=(224, 224), mode='bilinear', align_corners=False)
 
         
-        image = image[:, [2,3,4,5,6,7,10,11], :]
+        '''image = image[:, [2,3,4,5,6,7,10,11], :]
         std = std[:, [2,3,4,5,6,7,10,11], :]
-        mean = mean[:, [2,3,4,5,6,7,10,11], :]
+        mean = mean[:, [2,3,4,5,6,7,10,11], :]'''
         
 
         image = (image - mean.to(image.device)) / std.to(image.device)

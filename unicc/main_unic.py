@@ -62,6 +62,12 @@ def get_args():
         help="Comma-separated list of teacher names.",
     )
     parser.add_argument(
+        "--concat",
+        type=bool,
+        default=False,
+        help="Comma-separated list of teacher names.",
+    )
+    parser.add_argument(
         "--tnorm_ema_momentum_start",
         type=float,
         default=1.0,
@@ -428,7 +434,7 @@ def train_one_epoch(
 
             with torch.no_grad():
                 teacher_output = get_teacher_output(
-                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it]
+                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.concat
                 )
 
             loss, _ = unic_loss(
