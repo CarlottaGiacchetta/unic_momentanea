@@ -174,7 +174,7 @@ def get_args():
 
     parser.add_argument(
         "--output_dir",
-        default="./outputProva",
+        default="./output",
         type=str,
         help="Path to the output folder to save logs and checkpoints.",
     )
