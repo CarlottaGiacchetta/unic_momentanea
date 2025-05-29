@@ -1,4 +1,3 @@
-import torch.distributed as dist
 import os
 import logging
 from collections import OrderedDict
@@ -8,35 +7,23 @@ import torch
 
 from .teachers_config import TEACHER_CFG
 
-import logging
-
 
 logger = logging.getLogger()
 
 
-def build_teachers(teacher_names: List[str]) -> Union[Dict[str, torch.nn.Module], Dict[str, Dict[str, Dict[str, torch.Tensor]]]]:
+def build_teachers(
+    teacher_names: List[str],
+) -> Union[Dict[str, torch.nn.Module], Dict[str, Dict[str, Dict[str, torch.Tensor]]]]:
     teachers = OrderedDict()
     teacher_ft_stats = OrderedDict()
 
-    is_dist = dist.is_available() and dist.is_initialized()
-    rank = dist.get_rank() if is_dist else 0
-
     for tname in teacher_names:
         tname = tname.strip()
-        logger.info(f"[rank{rank}] Loading teacher '{tname}'")
-
-        # Scarica solo su rank 0
-        if rank == 0:
-            _ = _build_teacher(tname)
-
-        # Sincronizza tutti i processi prima di procedere (barriera)
-        if is_dist:
-            dist.barrier()
-
-        # Ora carica da file locale (tutti i rank)
+        logger.info("Loading teacher '{}'".format(tname))
         model = _build_teacher(tname)
         teachers[tname] = model
 
+        # buffers for teacher feature statistics
         ft_dim = TEACHER_CFG[tname]["num_features"]
         teacher_ft_stats[tname] = {
             "cls": {

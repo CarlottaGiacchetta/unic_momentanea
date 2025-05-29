@@ -62,9 +62,9 @@ def get_args():
         help="Comma-separated list of teacher names.",
     )
     parser.add_argument(
-        "--concat",
-        type=bool,
-        default=False,
+        "--strategy",
+        type=str,
+        default=None,
         help="Comma-separated list of teacher names.",
     )
     parser.add_argument(
@@ -431,10 +431,10 @@ def train_one_epoch(
 
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             student_output = model(image)
-
+            
             with torch.no_grad():
                 teacher_output = get_teacher_output(
-                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.concat
+                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy
                 )
 
             loss, _ = unic_loss(
@@ -517,7 +517,7 @@ def evaluate(
         target = target.cuda(non_blocking=True)
 
         student_output = model(image)
-        teacher_output = get_teacher_output(image, teachers, teacher_ft_stats, 0.0, args.concat)
+        teacher_output = get_teacher_output(image, teachers, teacher_ft_stats, 0.0, args.strategy)
 
         metric_dict = {}
         unic_loss(

@@ -227,8 +227,8 @@ def build_student_from_args(args):
     encoder = _build_encoder_from_args(args)
 
     from teachers import TEACHER_CFG
-    print('check nel file unic buildstudent bla bla', args.concat)
-    if args.concat:
+    print('check nel file unic buildstudent bla bla', args.strategy)
+    if args.strategy == "abf" or args.strategy == "mean":
         head_dims = {
             "mergedFeatures": TEACHER_CFG["scalemae_rgb"]["num_features"]  # o metti a mano il valore corretto
         }
