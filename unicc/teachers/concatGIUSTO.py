@@ -1,7 +1,3 @@
-# concat.py
-import torch
-import torch.nn as nn
-from itertools import chain
 import logging
 import torch
 import torch.nn as nn
@@ -26,31 +22,41 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class ConvNeXtStyleBlock(nn.Module):
+class ConvNeXtBlock(nn.Module):
+    """
+    ConvNeXt block (fedelmente alla figura):
+      • Depthwise conv 7x7, groups=C
+      • LayerNorm
+      • PW-Conv 1x1 -> 4C
+      • GELU
+      • PW-Conv 1x1 -> C
+      • Residual
+    """
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
-        self.conv1 = nn.Conv2d(dim, dim, kernel_size=1)
-        self.norm1 = nn.LayerNorm(dim, eps=eps)
-        self.act1 = nn.GELU()
+        self.dw_conv   = nn.Conv2d(dim, dim, kernel_size=7,
+                                   padding=3, groups=dim)
+        self.ln        = nn.LayerNorm(dim, eps=eps)          # LN su canali
+        self.pw_conv1  = nn.Conv2d(dim, 4 * dim, kernel_size=1)
+        self.act       = nn.GELU()
+        self.pw_conv2  = nn.Conv2d(4 * dim, dim, kernel_size=1)
 
-        self.conv2 = nn.Conv2d(dim, dim, kernel_size=1)
-        self.norm2 = nn.LayerNorm(dim, eps=eps)
-        self.act2 = nn.GELU()
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        print('sono nel forward della convnext')
+        print(x.shape)
+        shortcut = x # (B,C,H,W)
+        x = self.dw_conv(x) # depthwise 7×7
 
-        self.conv3 = nn.Conv2d(dim, dim, kernel_size=1)
+        # LayerNorm richiede (B,H,W,C) ? permuta, applica, poi ripermuta
+        x = x.permute(0, 2, 3, 1) # (B,H,W,C)
+        x = self.ln(x) #LayerNorm
+        x = x.permute(0, 3, 1, 2) # (B,C,H,W)
 
-    def forward(self, x):
-        # Permute for LayerNorm: from (B,C,H,W) ? (B,H,W,C)
-        x = x.permute(0, 2, 3, 1)
-        x = self.conv1(x.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
-        x = self.act1(self.norm1(x))
+        x = self.pw_conv1(x) # conv 1×1, 4C
+        x = self.act(x) #Gelu activation
+        x = self.pw_conv2(x) # con 1×1, C
 
-        x = self.conv2(x.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
-        x = self.act2(self.norm2(x))
-
-        x = self.conv3(x.permute(0, 3, 1, 2))  # Back to (B,C,H,W)
-        return x
-
+        return x + shortcut # residual
 
 
 class RepresentationAlignmentBlock(nn.Module):
@@ -75,7 +81,7 @@ class RepresentationAlignmentBlock(nn.Module):
         )
 
         # ConvNeXt-style block on C/2
-        self.stage2 = ConvNeXtStyleBlock(mid_dim)
+        self.stage2 = ConvNeXtBlock(mid_dim)
 
         # final projection C/4
         self.stage3 = nn.Sequential(
@@ -102,6 +108,45 @@ class RepresentationAlignmentBlock(nn.Module):
 # ------------------------------------------------------------
 # 1. CBAM: Convolutional Block Attention Module
 # ------------------------------------------------------------
+'''class CBAM(nn.Module):
+    """
+    Standard CBAM implementation:
+      • Channel Attention (MLP on global avg & max-pool features)
+      • Spatial  Attention (7x7 conv over concatenated avg/max maps)
+    """
+    def __init__(self, in_channels: int, reduction: int = 16, kernel_size: int = 7):
+        super().__init__()
+        # Channel attention --------------------------------------------------
+        reduced = max(in_channels // reduction, 1)
+        
+        #mlp dovrebbe avere un unico hidden layer
+        self.mlp = nn.Sequential(
+            nn.Conv2d(in_channels, reduced, kernel_size=1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(reduced, in_channels, kernel_size=1, bias=False)
+        )
+        # Spatial attention --------------------------------------------------
+        self.spatial = nn.Conv2d(2, 1, kernel_size=kernel_size,
+                                 padding=kernel_size // 2, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # ---- Channel attention ----
+        avg_pool = torch.mean(x, dim=(2, 3), keepdim=True)            # (B,C,1,1)
+        max_pool = torch.amax(x, dim=(2, 3), keepdim=True)
+         # (B,C,1,1)
+        ca = torch.sigmoid(self.mlp(avg_pool) + self.mlp(max_pool))   # (B,C,1,1)
+        print('channel attention shape (C 1 1)', ca.shape)
+        x = x * ca
+        print('x shape after ca', x.shape)
+
+        # ---- Spatial attention ----
+        avg_map = torch.mean(x, dim=1, keepdim=True)  # (B, 1, H, W)
+        max_map, _ = torch.max(x, dim=1, keepdim=True)  # (B, 1, H, W)
+        sa = torch.sigmoid(self.spatial(torch.cat([avg_map, max_map], dim=1)))  # (B, 1, H, W)
+        print('spatial attention shape (1 H W)', ca.shape)
+        x = x * sa
+        print('x shape after sa', x.shape)
+        return x'''
 
 class CBAM(nn.Module):
 
@@ -116,9 +161,17 @@ class CBAM(nn.Module):
 
     def forward(self, f):
         chan_att = self.channel_attention(f)
+        print('print(chan_att.size())')
+        print(chan_att.size())
         fp = chan_att * f
+        print('print(fp.size())')
+        print(fp.size())
         spat_att = self.spatial_attention(fp)
+        print('print(spat_att.size())')
+        print(spat_att.size())
         fpp = spat_att * fp
+        print('print(fpp.size())')
+        print(fpp.size())
         return fpp
 
 
@@ -207,6 +260,11 @@ class AttentionFusionBlock(nn.Module):
                  reduction: int = 16, act: str = "relu"):
         super().__init__()
         self.cbam = CBAM(input_dim, reduction_ratio=reduction, kernel_size=7)
+        '''self.proj = nn.Sequential(
+            nn.Conv2d(input_dim, output_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(output_dim),
+            nn.ReLU(inplace=True) if act == "relu" else nn.GELU()
+        )'''
         self.proj = nn.Conv2d(input_dim, output_dim, kernel_size=1, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -216,105 +274,7 @@ class AttentionFusionBlock(nn.Module):
         """
         x = self.cbam(x)
         x = self.proj(x)
+        exit()
         return x
 
 
-
-
-
-
-class TeacherAggregator(nn.Module):
-    """
-    Aggrega le feature normalizzate dei teacher con:
-      • Representation Alignment Block (RAB)   – per ogni teacher
-      • Attention-Based Fusion (ABF)           – per cls & patch token
-    """
-
-    def __init__(
-        self,
-        teacher_dims,          # list[int] – C di ogni teacher (= embed_dim)
-        strategy,              # list[str]  – ["rab","abf","mean", ...]
-        fused_dim=1024,        # canale finale dopo ABF
-        reduction=16           # per il CBAM interno all'ABF
-    ):
-        super().__init__()
-
-        self.use_rab  = "rab"  in strategy
-        self.use_abf  = "abf"  in strategy
-        self.use_mean = "mean" in strategy          # fallback
-
-        # 1) RAB – uno per teacher
-        self.rab_cls   = nn.ModuleList()
-        self.rab_patch = nn.ModuleList()
-        self.rab_out_dim = None                     # C' = C//4
-
-        for C in teacher_dims:
-            self.rab_cls.append(RepresentationAlignmentBlock(C))
-            self.rab_patch.append(RepresentationAlignmentBlock(C))
-            if self.rab_out_dim is None:
-                self.rab_out_dim = C // 4 if self.use_rab else C
-
-        # 2) ABF – uno per tipo di token
-        if self.use_abf:
-            in_dim = len(teacher_dims) * self.rab_out_dim
-            self.abf_cls   = AttentionFusionBlock(in_dim, fused_dim, reduction)
-            self.abf_patch = AttentionFusionBlock(in_dim, fused_dim, reduction)
-
-    # ------------------------------------------------------------------
-    def _align(self, feats, rab_list):
-        """Applica il RAB a una lista di feature (una per teacher)."""
-        out = []
-        for f, rab in zip(feats, rab_list):
-            B, L, C = f.shape
-            H = W = int(L ** 0.5)
-            f = f.view(B, H, W, C).permute(0, 3, 1, 2)   # (B,C,H,W)
-            f = rab(f)                                   # (B,C',H,W)
-            f = f.permute(0, 2, 3, 1).reshape(B, L, -1)  # (B,L,C')
-            out.append(f)
-        return out                                      # list[(B,L,C')]
-
-    # ------------------------------------------------------------------
-    def forward(self, cls_list, patch_list):
-        """
-        Args
-        ----
-        cls_list   : list[Tensor]  (B, L, C)
-        patch_list : list[Tensor]  (B, L, C)
-
-        Returns
-        -------
-        Dict[str, Tensor] con chiavi "cls" & "patch"
-        """
-
-        # 1) Alignment
-        if self.use_rab:
-            cls_aligned   = self._align(cls_list,   self.rab_cls)
-            patch_aligned = self._align(patch_list, self.rab_patch)
-        else:
-            cls_aligned, patch_aligned = cls_list, patch_list
-
-        # 2) Fusione
-        if self.use_abf:
-            fused = {}
-
-            def _fuse(feats, abf):
-                B, N, L, C = feats.shape
-                H = W = int(L ** 0.5)
-                feats = feats.view(B, N, H, W, C).permute(0, 1, 4, 2, 3)
-                feats = torch.cat([f for f in feats.unbind(dim=1)], dim=1)  # (B,NC,H,W)
-                fused = abf(feats)                                          # (B,Cf,H,W)
-                return fused.permute(0, 2, 3, 1).reshape(B, L, -1)          # (B,L,Cf)
-
-            cls_stack   = torch.stack(cls_aligned,   dim=1)   # (B,N,L,C')
-            patch_stack = torch.stack(patch_aligned, dim=1)
-
-            fused["cls"]   = _fuse(cls_stack,   self.abf_cls)
-            fused["patch"] = _fuse(patch_stack, self.abf_patch)
-
-        else:   # media semplice
-            fused = {
-                "cls":   torch.mean(torch.stack(cls_aligned,   dim=0), dim=0),
-                "patch": torch.mean(torch.stack(patch_aligned, dim=0), dim=0),
-            }
-
-        return fused

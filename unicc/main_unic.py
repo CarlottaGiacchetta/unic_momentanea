@@ -6,6 +6,7 @@ import shutil
 import sys
 import time
 import logging
+import ast
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -17,6 +18,7 @@ from torchvision.datasets import ImageFolder
 import utils
 from modeling.unic import build_student_from_args
 from teachers import build_teachers, get_teacher_output
+from teachers.concat import TeacherAggregator
 from modeling.losses import unic_loss
 from dinov2.logging import setup_logging, ExternalLogger, MetricLogger
 from dinov2.distributed import get_global_rank
@@ -66,6 +68,12 @@ def get_args():
         type=str,
         default=None,
         help="Comma-separated list of teacher names.",
+    )
+    parser.add_argument(
+        "--aggregation_parameter",
+        type=str,
+        default="{'alpha': 0.5, 'beta': 0.5}",
+        help="Dictionary of keyword arguments (alpha, beta) for the aggregation (sum must be 1).",
     )
     parser.add_argument(
         "--tnorm_ema_momentum_start",
@@ -244,7 +252,13 @@ def get_args():
 
     args.teachers = sorted(args.teachers.split(","))
     args.num_cpus = len(os.sched_getaffinity(0))
-
+    try:
+        args.aggregation_parameter = ast.literal_eval(args.aggregation_parameter)
+    except Exception as e:
+        raise ValueError(f"Invalid --aggregation_parameter: {args.aggregation_parameter}. Error: {e}")
+    
+    if not isinstance(args.aggregation_parameter, dict):
+        raise ValueError("--aggregation_parameter must be a dictionary.")
     os.makedirs(args.output_dir, exist_ok=True)
 
     return args
@@ -268,7 +282,12 @@ def main(args):
     print(validation, val_loader)
 
     logger.info("Loading teachers ...")
-    teachers, teacher_ft_stats = build_teachers(args.teachers)
+    teachers, teacher_ft_stats, teacher_dims = build_teachers(args.teachers)
+
+    aggregator = TeacherAggregator(teacher_dims, args.strategy).cuda()
+    aggregator = nn.parallel.DistributedDataParallel(
+        aggregator, device_ids=[args.gpu], find_unused_parameters=True
+    )
     
 
     logger.info("Creating student model")
@@ -339,6 +358,7 @@ def main(args):
             model,
             teachers,
             teacher_ft_stats,
+            aggregator,
             train_loader,
             optimizer,
             epoch,
@@ -351,6 +371,7 @@ def main(args):
             model,
             teachers,
             teacher_ft_stats,
+            aggregator,
             val_loader,
             epoch,
             ext_logger,
@@ -384,6 +405,7 @@ def train_one_epoch(
     model,
     teachers,
     teacher_ft_stats,
+    aggregator,
     data_loader,
     optimizer,
     epoch,
@@ -434,7 +456,7 @@ def train_one_epoch(
             
             with torch.no_grad():
                 teacher_output = get_teacher_output(
-                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy
+                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy, args.aggregation_parameter, aggregator=aggregator
                 )
 
             loss, _ = unic_loss(
@@ -497,6 +519,7 @@ def evaluate(
     model,
     teachers,
     teacher_ft_stats,
+    aggregator,
     data_loader,
     epoch,
     ext_logger,
@@ -517,7 +540,7 @@ def evaluate(
         target = target.cuda(non_blocking=True)
 
         student_output = model(image)
-        teacher_output = get_teacher_output(image, teachers, teacher_ft_stats, 0.0, args.strategy)
+        teacher_output = get_teacher_output(image, teachers, teacher_ft_stats, 0.0, args.strategy, args.aggregation_parameter, aggregator)
 
         metric_dict = {}
         unic_loss(

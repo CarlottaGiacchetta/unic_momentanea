@@ -35,8 +35,10 @@ def build_teachers(
                 "std": torch.ones(1, 1, ft_dim).cuda(),
             },
         }
+    
+    teacher_dims = [TEACHER_CFG[t]["num_features"] for t in teacher_names]
 
-    return teachers, teacher_ft_stats
+    return teachers, teacher_ft_stats, teacher_dims
 
 
 def _build_teacher(name):

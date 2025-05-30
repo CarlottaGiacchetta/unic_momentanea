@@ -20,6 +20,8 @@ def get_teacher_output(
     teacher_ft_stats: Dict[str, Dict[str, Dict[str, torch.Tensor]]],
     teacher_ft_stat_ema_momentum: float = 0.0,
     strategy: List[str] = None,
+    aggregation_parameter: Dict[str, float] = None,
+    aggregator=None,
 ) -> Dict[str, Dict[str, torch.Tensor]]:
 
     teacher_output = defaultdict(dict)
@@ -67,28 +69,6 @@ def get_teacher_output(
                 tout = tout.unsqueeze(1)  # (B, C) ? (B, 1, C)
             B, L, C = tout.shape
 
-            if use_rab:
-                if tout.ndim == 2:
-                    tout = tout.unsqueeze(1) 
-                B, L, C = tout.shape
-                H = W = int(L ** 0.5)
-                tout = tout.view(B, H, W, C).permute(0, 3, 1, 2)  # (B, C, H, W)
-
-                # Inizializzazione dinamica dei blocchi RAB
-                if ttype == "cls" and rab_cls is None:
-                    rab_cls = RepresentationAlignmentBlock(input_dim=C).to(image.device)
-                    rab_out_dim = C // 4
-                elif ttype == "patch" and rab_patch is None:
-                    rab_patch = RepresentationAlignmentBlock(input_dim=C).to(image.device)
-                    rab_out_dim = C // 4
-
-                tout = rab_cls(tout) if ttype == "cls" else rab_patch(tout)  # (B, C', H, W)
-                tout = tout.permute(0, 2, 3, 1).reshape(B, L, -1)  # (B, L, C')
-            
-            else:
-                if rab_out_dim is None:
-                    rab_out_dim = C  # se RAB non è usato, usa la C originale
-
             if use_mean or use_abf:
                 if ttype == "cls":
                     cls_list.append(tout)
@@ -98,42 +78,37 @@ def get_teacher_output(
             teacher_output[tname][ttype] = tout
 
     # Fusione finale
-    if use_mean or use_abf:
+    merged_output = {}
+
+    if use_mean:
+        merged_output["mean"] = {
+            "cls": torch.mean(torch.stack(cls_list, dim=0), dim=0).squeeze(1),
+            "patch": torch.mean(torch.stack(patch_list, dim=0), dim=0)
+        }
+
+    if use_abf:
+        assert aggregator is not None, "Pass `aggregator` if using ABF strategy"
+        abf = aggregator(cls_list, patch_list)
+        merged_output["abf"] = {
+            "cls": abf["cls"].squeeze(1),
+            "patch": abf["patch"]
+        }
+
+    if merged_output:
         teacher_output = {"mergedFeatures": {}}
+        # Se entrambe presenti, si può decidere se restituirle separate o fonderle ulteriormente
+        if "mean" in merged_output and "abf" in merged_output:
+            alpha = aggregation_parameter.get("alpha", 0.5)
+            beta = aggregation_parameter.get("beta", 0.5)
+            assert abs(alpha + beta - 1.0) < 1e-5, f"alpha + beta must be 1.0, got {alpha + beta}"
 
-        if use_abf:
-            assert rab_out_dim is not None, "rab_out_dim must be set before ABF"
-
-            # Inizializzazione dinamica dei blocchi ABF
-            if abf_cls is None:
-                abf_cls = AttentionFusionBlock(
-                    input_dim=len(cls_list) * rab_out_dim,
-                    output_dim=1024
-                ).to(image.device)
-            if abf_patch is None:
-                abf_patch = AttentionFusionBlock(
-                    input_dim=len(patch_list) * rab_out_dim,
-                    output_dim=1024
-                ).to(image.device)
-
-            def fuse(feat_list, block):
-                feats = torch.stack(feat_list, dim=1)  # (B, N, L, C)
-                B, N, L, C = feats.shape
-                H = W = int(L ** 0.5)
-                feats = feats.view(B, N, H, W, C).permute(0, 1, 4, 2, 3)  # (B, N, C, H, W)
-                feats = torch.cat([f for f in feats.unbind(dim=1)], dim=1)  # (B, N*C, H, W)
-                fused = block(feats)  # (B, C_out, H, W)
-                return fused.permute(0, 2, 3, 1).reshape(B, L, -1)  # (B, L, C_out)
-
-            teacher_output["mergedFeatures"] = {
-                "cls": fuse(cls_list, abf_cls),
-                "patch": fuse(patch_list, abf_patch)
-            }
-
-        elif use_mean:
-            teacher_output["mergedFeatures"] = {
-                "cls": torch.mean(torch.stack(cls_list, dim=0), dim=0),
-                "patch": torch.mean(torch.stack(patch_list, dim=0), dim=0)
-            }
+            teacher_output = {"mergedFeatures": {
+                "cls": alpha * merged_output["mean"]["cls"] + beta * merged_output["abf"]["cls"],
+                "patch": alpha * merged_output["mean"]["patch"] + beta * merged_output["abf"]["patch"]
+            }}
+        elif "mean" in merged_output:
+            teacher_output = {"mergedFeatures": merged_output["mean"]}
+        elif "abf" in merged_output:
+            teacher_output = {"mergedFeatures": merged_output["abf"]}
 
     return teacher_output

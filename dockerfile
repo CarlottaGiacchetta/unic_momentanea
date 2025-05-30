@@ -17,8 +17,8 @@ USER $USER
 RUN  pip install torchgeo 
 # RUN  pip install tim 
 
-#CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "10", "--in_chans", "12", "--strategy", "[\"mean\"]", "--output_dir", "Distil12FusionStrategy/mean"]
+#CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "10", "--in_chans", "12", "--strategy", "[\"mean\"]", "--output_dir", "Distil12FusionStrategy/meanAAAAA"]
 
 
 
-CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "10", "--in_chans", "12", "--strategy", "[\"abf\"]", "--output_dir", "Distil12FusionStrategy/abf"]
+CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "10", "--in_chans", "12", "--strategy", "[\"abf\", \"rab\", \"mean\"]", "--output_dir", "Distil12FusionStrategy/abf+rab+mean(0.50.5)", "--saveckpt_freq", "2"]
