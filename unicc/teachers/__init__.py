@@ -29,10 +29,12 @@ def get_teacher_output(
     use_rab = strategy and "rab" in strategy
     use_abf = strategy and "abf" in strategy
 
-    rab_cls = RepresentationAlignmentBlock(input_dim=768).to(image.device) if use_rab else None
-    rab_patch = RepresentationAlignmentBlock(input_dim=768).to(image.device) if use_rab else None
-    abf_cls = AttentionFusionBlock(input_dim=3 * 192, output_dim=768).to(image.device) if use_abf else None
-    abf_patch = AttentionFusionBlock(input_dim=3 * 192, output_dim=768).to(image.device) if use_abf else None
+    rab_cls = None
+    rab_patch = None
+    abf_cls = None
+    abf_patch = None
+
+    rab_out_dim = None  # dimensione delle feature dopo RAB (C // 4)
 
     for tname in teachers.keys():
         image_copy = image
@@ -61,14 +63,31 @@ def get_teacher_output(
                 std_ema=teacher_ft_stats[tname][ttype]["std"],
                 ema_momentum=teacher_ft_stat_ema_momentum,
             )
+            if tout.ndim == 2:
+                tout = tout.unsqueeze(1)  # (B, C) ? (B, 1, C)
+            B, L, C = tout.shape
 
             if use_rab:
-                # Converti da (B, L, C) ? (B, C, H, W) per RAB
+                if tout.ndim == 2:
+                    tout = tout.unsqueeze(1) 
                 B, L, C = tout.shape
-                H = W = int(L**0.5)
+                H = W = int(L ** 0.5)
                 tout = tout.view(B, H, W, C).permute(0, 3, 1, 2)  # (B, C, H, W)
+
+                # Inizializzazione dinamica dei blocchi RAB
+                if ttype == "cls" and rab_cls is None:
+                    rab_cls = RepresentationAlignmentBlock(input_dim=C).to(image.device)
+                    rab_out_dim = C // 4
+                elif ttype == "patch" and rab_patch is None:
+                    rab_patch = RepresentationAlignmentBlock(input_dim=C).to(image.device)
+                    rab_out_dim = C // 4
+
                 tout = rab_cls(tout) if ttype == "cls" else rab_patch(tout)  # (B, C', H, W)
                 tout = tout.permute(0, 2, 3, 1).reshape(B, L, -1)  # (B, L, C')
+            
+            else:
+                if rab_out_dim is None:
+                    rab_out_dim = C  # se RAB non è usato, usa la C originale
 
             if use_mean or use_abf:
                 if ttype == "cls":
@@ -83,10 +102,24 @@ def get_teacher_output(
         teacher_output = {"mergedFeatures": {}}
 
         if use_abf:
+            assert rab_out_dim is not None, "rab_out_dim must be set before ABF"
+
+            # Inizializzazione dinamica dei blocchi ABF
+            if abf_cls is None:
+                abf_cls = AttentionFusionBlock(
+                    input_dim=len(cls_list) * rab_out_dim,
+                    output_dim=1024
+                ).to(image.device)
+            if abf_patch is None:
+                abf_patch = AttentionFusionBlock(
+                    input_dim=len(patch_list) * rab_out_dim,
+                    output_dim=1024
+                ).to(image.device)
+
             def fuse(feat_list, block):
                 feats = torch.stack(feat_list, dim=1)  # (B, N, L, C)
                 B, N, L, C = feats.shape
-                H = W = int(L**0.5)
+                H = W = int(L ** 0.5)
                 feats = feats.view(B, N, H, W, C).permute(0, 1, 4, 2, 3)  # (B, N, C, H, W)
                 feats = torch.cat([f for f in feats.unbind(dim=1)], dim=1)  # (B, N*C, H, W)
                 fused = block(feats)  # (B, C_out, H, W)
@@ -104,4 +137,3 @@ def get_teacher_output(
             }
 
     return teacher_output
-

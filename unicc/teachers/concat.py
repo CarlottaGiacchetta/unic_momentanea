@@ -130,13 +130,14 @@ class CBAM(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # ---- Channel attention ----
         avg_pool = torch.mean(x, dim=(2, 3), keepdim=True)            # (B,C,1,1)
-        max_pool, _ = torch.max(x,  dim=(2, 3), keepdim=True)         # (B,C,1,1)
+        max_pool = torch.amax(x, dim=(2, 3), keepdim=True)
+         # (B,C,1,1)
         ca = torch.sigmoid(self.mlp(avg_pool) + self.mlp(max_pool))   # (B,C,1,1)
         x = x * ca
 
         # ---- Spatial attention ----
         avg_map = torch.mean(x, dim=1, keepdim=True)                  # (B,1,H,W)
-        max_map, _ = torch.max(x, dim=1, keepdim=True)                # (B,1,H,W)
+        max_map = torch.amax(x, dim=1, keepdim=True)                # (B,1,H,W)
         sa = torch.sigmoid(self.spatial(torch.cat([avg_map, max_map], dim=1)))
         x = x * sa
         return x
