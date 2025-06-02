@@ -72,8 +72,14 @@ def get_args():
     parser.add_argument(
         "--aggregation_parameter",
         type=str,
-        default="{'alpha': 0.5, 'beta': 0.5}",
-        help="Dictionary of keyword arguments (alpha, beta) for the aggregation (sum must be 1).",
+        default="{'alpha': 0.9, 'beta': 0.1}",
+        help="Dictionary of keyword arguments (alpha - mean, beta - abf) for the aggregation (sum must be 1).",
+    )
+    parser.add_argument(
+        "--aggregation_scheduler",
+        type=bool,
+        default=False,
+        help="cambia i parametri alpha e beta.",
     )
     parser.add_argument(
         "--tnorm_ema_momentum_start",
@@ -348,10 +354,18 @@ def main(args):
 
     logger.info("Training starts ...")
     start_time = time.time()
+    
+    aggregation_parameter = args.aggregation_parameter.copy()
+
 
     for epoch in range(start_epoch, args.epochs):
         if hasattr(train_loader.sampler, 'set_epoch'):
           train_loader.sampler.set_epoch(epoch)
+        
+        # aggiorna solo se richiesto
+        if args.aggregation_scheduler:
+            aggregation_parameter = utils.scheduler_aggregation_weights(epoch, aggregation_parameter)
+            logger.info(f"aggregation_parameter = {aggregation_parameter}")
 
 
         train_one_epoch(
@@ -365,6 +379,7 @@ def main(args):
             fp16_scaler,
             ext_logger,
             args,
+            aggregation_parameter  # passa quello aggiornato
         )
 
         evaluate(
@@ -412,6 +427,7 @@ def train_one_epoch(
     fp16_scaler,
     ext_logger,
     args,
+    aggregation_parameter
 ):
     logger.info("-" * 50)
     logger.info("Starting training epoch {}".format(epoch))
@@ -454,9 +470,10 @@ def train_one_epoch(
         with torch.cuda.amp.autocast(fp16_scaler is not None):
             student_output = model(image)
             
+
             with torch.no_grad():
                 teacher_output = get_teacher_output(
-                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy, args.aggregation_parameter, aggregator=aggregator
+                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy, aggregation_parameter, aggregator=aggregator
                 )
 
             loss, _ = unic_loss(

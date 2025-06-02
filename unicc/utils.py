@@ -332,6 +332,21 @@ def standard_normalize(data, mean_ema=None, std_ema=None, ema_momentum=0.1, eps=
     return data
 
 
+def scheduler_aggregation_weights(epoch, aggregation_parameter):
+    """
+    Brutal step scheduler:
+    - Starts with alpha = 0.1, beta = 0.9
+    - Every 2 epochs, alpha increases by 0.1 and beta decreases by 0.1
+    - Capped to alpha=0.9, beta=0.1
+    """
+    step = min(epoch // 2, 8)  # step ? [0, 8] ? alpha ? [0.1, 0.9]
+    alpha = aggregation_parameter.get("alpha", 0.5)
+    beta = aggregation_parameter.get("beta", 0.5)
+    alpha = 0.1 + 0.1 * step
+    beta = 1.0 - alpha
+    return {"alpha": alpha, "beta": beta}
+
+
 @torch.no_grad()
 def concat_all_gather(tensor):
     """
@@ -430,3 +445,4 @@ class ProgressMeter(object):
         num_digits = len(str(num_batches // 1))
         fmt = "{:" + str(num_digits) + "d}"
         return "[" + fmt + "/" + fmt.format(num_batches) + "]"
+    

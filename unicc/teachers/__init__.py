@@ -96,7 +96,7 @@ def get_teacher_output(
 
     if merged_output:
         teacher_output = {"mergedFeatures": {}}
-        # Se entrambe presenti, si può decidere se restituirle separate o fonderle ulteriormente
+        # Se entrambe presenti, si pu? decidere se restituirle separate o fonderle ulteriormente
         if "mean" in merged_output and "abf" in merged_output:
             alpha = aggregation_parameter.get("alpha", 0.5)
             beta = aggregation_parameter.get("beta", 0.5)

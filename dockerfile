@@ -21,4 +21,4 @@ RUN  pip install torchgeo
 
 
 
-CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "10", "--in_chans", "12", "--strategy", "[\"abf\", \"rab\", \"mean\"]", "--output_dir", "Distil12FusionStrategy/abf+rab+mean(0.50.5)", "--saveckpt_freq", "2"]
+CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--in_chans", "12", "--strategy", "[\"abf\", \"rab\", \"mean\"]", "--output_dir", "Distil12FusionStrategy/abf+rab+mean(0.50.5)", "--saveckpt_freq", "2", "--aggregation_scheduler", "False", "--aggregation_parameter", "{'alpha': 0.5, 'beta': 0.5}"]
