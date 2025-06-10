@@ -234,14 +234,17 @@ class TeacherAggregator(nn.Module):
         self,
         teacher_dims,          # list[int] – C di ogni teacher (= embed_dim)
         strategy,              # list[str]  – ["rab","abf","mean", ...]
-        fused_dim=1024,        # canale finale dopo ABF
         reduction=16           # per il CBAM interno all'ABF
     ):
         super().__init__()
-
-        self.use_rab  = "rab"  in strategy
-        self.use_abf  = "abf"  in strategy
-        self.use_mean = "mean" in strategy          # fallback
+        self.fused_dim = max(teacher_dims) # canale finale dopo ABF
+  
+        if strategy is None:
+            self.use_rab = self.use_abf = self.use_mean = False
+        else:
+            self.use_rab  = "rab"  in strategy
+            self.use_abf  = "abf"  in strategy
+            self.use_mean = "mean" in strategy          # fallback
 
         # 1) RAB – uno per teacher
         self.rab_cls   = nn.ModuleList()
@@ -257,8 +260,8 @@ class TeacherAggregator(nn.Module):
         # 2) ABF – uno per tipo di token
         if self.use_abf:
             in_dim = len(teacher_dims) * self.rab_out_dim
-            self.abf_cls   = AttentionFusionBlock(in_dim, fused_dim, reduction)
-            self.abf_patch = AttentionFusionBlock(in_dim, fused_dim, reduction)
+            self.abf_cls   = AttentionFusionBlock(in_dim, self.fused_dim, reduction)
+            self.abf_patch = AttentionFusionBlock(in_dim, self.fused_dim, reduction)
 
     # ------------------------------------------------------------------
     def _align(self, feats, rab_list):

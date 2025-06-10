@@ -61,6 +61,7 @@ class PatchEmbed(nn.Module):
         self.embed_dim = embed_dim
 
         self.flatten_embedding = flatten_embedding
+        
 
         self.proj = nn.Conv2d(
             in_chans, embed_dim, kernel_size=patch_HW, stride=patch_HW

@@ -230,8 +230,10 @@ def build_student_from_args(args):
     print('check nel file unic buildstudent bla bla', args.strategy)
     if "abf" in args.strategy or "mean" in args.strategy:
         head_dims = {
-            "mergedFeatures": TEACHER_CFG["scalemae_rgb"]["num_features"]  # o metti a mano il valore corretto
+            "mergedFeatures": max([TEACHER_CFG[tname]["num_features"] for tname in args.teachers])  # o metti a mano il valore corretto
         }
+        print(head_dims)
+        
     else:
         head_dims={
             tname: TEACHER_CFG[tname.strip()]["num_features"] for tname in args.teachers

@@ -65,9 +65,9 @@ def get_args():
     )
     parser.add_argument(
         "--strategy",
-        type=str,
-        default=None,
-        help="Comma-separated list of teacher names.",
+        type=lambda s: eval(s) if s else [],  # converte stringa in lista
+        default=[],
+        help='Fusion strategy, e.g., \'["rab", "abf"]\''
     )
     parser.add_argument(
         "--aggregation_parameter",
@@ -289,6 +289,7 @@ def main(args):
 
     logger.info("Loading teachers ...")
     teachers, teacher_ft_stats, teacher_dims = build_teachers(args.teachers)
+
 
     aggregator = TeacherAggregator(teacher_dims, args.strategy).cuda()
     aggregator = nn.parallel.DistributedDataParallel(
