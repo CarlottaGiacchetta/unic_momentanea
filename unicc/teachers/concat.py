@@ -238,24 +238,29 @@ class TeacherAggregator(nn.Module):
     ):
         super().__init__()
         self.fused_dim = max(teacher_dims) # canale finale dopo ABF
-  
-        if strategy is None:
+        
+        logger.info('strategy: ',strategy)
+        if not strategy:
             self.use_rab = self.use_abf = self.use_mean = False
+            logger.info("No strategy specified: using identity fallback.")
         else:
             self.use_rab  = "rab"  in strategy
             self.use_abf  = "abf"  in strategy
             self.use_mean = "mean" in strategy          # fallback
+            logger.info(f"Strategy specified: rab {self.use_rab}, abf {self.use_abf}, mean {self.use_mean}")
 
         # 1) RAB – uno per teacher
         self.rab_cls   = nn.ModuleList()
         self.rab_patch = nn.ModuleList()
         self.rab_out_dim = None                     # C' = C//4
-
-        for C in teacher_dims:
-            self.rab_cls.append(RepresentationAlignmentBlock(C))
-            self.rab_patch.append(RepresentationAlignmentBlock(C))
-            if self.rab_out_dim is None:
-                self.rab_out_dim = C // 4 if self.use_rab else C
+        
+        if self.use_rab:
+            for C in teacher_dims:
+                self.rab_cls.append(RepresentationAlignmentBlock(C))
+                self.rab_patch.append(RepresentationAlignmentBlock(C))
+            self.rab_out_dim = teacher_dims[0] // 4
+        else:
+            self.rab_out_dim = teacher_dims[0]
 
         # 2) ABF – uno per tipo di token
         if self.use_abf:

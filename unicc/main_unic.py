@@ -292,10 +292,16 @@ def main(args):
 
 
     aggregator = TeacherAggregator(teacher_dims, args.strategy).cuda()
-    aggregator = nn.parallel.DistributedDataParallel(
-        aggregator, device_ids=[args.gpu], find_unused_parameters=True
-    )
     
+    # Controlla se ha parametri che richiedono gradiente
+    has_trainable_params = any(p.requires_grad for p in aggregator.parameters())
+    
+    if has_trainable_params:
+        aggregator = nn.parallel.DistributedDataParallel(aggregator, device_ids=[args.gpu], find_unused_parameters=True)
+        logger.info("Wrapped aggregator in DDP.")
+    else:
+      logger.info("Using strategy - identity fallback")
+
 
     logger.info("Creating student model")
     model = build_student_from_args(args)
