@@ -11,10 +11,11 @@ from dinov2.models import vision_transformer
 
 
 class UNIC(nn.Module):
-    def __init__(self, encoder, lp):
+    def __init__(self, encoder, lp, in_chans):
         super().__init__()
         self.encoder = encoder
         self.lp = lp
+        self.in_chans = in_chans
 
     def forward(self, image):
         mean = torch.tensor([
@@ -32,10 +33,10 @@ class UNIC(nn.Module):
 
         image = F.interpolate(image, size=(224, 224), mode='bilinear', align_corners=False)
 
-        
-        '''image = image[:, [2,3,4,5,6,7,10,11], :]
-        std = std[:, [2,3,4,5,6,7,10,11], :]
-        mean = mean[:, [2,3,4,5,6,7,10,11], :]'''
+        if self.in_chans == 9:
+            image = image[:, [1,2,3,4,5,6,7,10,11], :]
+            std = std[:, [1,2,3,4,5,6,7,10,11], :]
+            mean = mean[:, [1,2,3,4,5,6,7,10,11], :]
         
 
         image = (image - mean.to(image.device)) / std.to(image.device)
@@ -248,7 +249,7 @@ def build_student_from_args(args):
         **lp_args,
     )
 
-    model = UNIC(encoder, lp)
+    model = UNIC(encoder, lp, args.in_chans)
 
     return model
 
