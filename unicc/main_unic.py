@@ -310,12 +310,25 @@ def main(args):
         model, device_ids=[args.gpu], find_unused_parameters=True
     )
     utils.save_model_defn(model.module, os.path.join(args.output_dir, "model_defn.txt"))
-
+    
+    param_groups = utils.get_params_groups(
+          model,
+          save_file_path=os.path.join(args.output_dir, "params_groups.txt"),
+      )
+      
+    if has_trainable_params:          # True se strategy ha "rab" o "abf"
+        param_groups.append(
+            {
+                "params": [p for p in aggregator.parameters()
+                          if p.requires_grad],
+                # volendo puoi assegnare un LR diverso, es:
+                # "lr": args.lr * 0.5
+            }
+        )
+    
+    
     optimizer = torch.optim.AdamW(
-        utils.get_params_groups(
-            model,
-            save_file_path=os.path.join(args.output_dir, "params_groups.txt"),
-        ),
+        param_groups,
         lr=0,
         **eval(args.optim_args),
     )
@@ -444,6 +457,7 @@ def train_one_epoch(
     header = "Training - Epoch: [{}/{}]".format(epoch, args.epochs)
 
     model.train()
+    aggregator.train()
 
     for it, sample in enumerate(
         metric_logger.log_every(
@@ -478,10 +492,10 @@ def train_one_epoch(
             student_output = model(image)
             
 
-            with torch.no_grad():
-                teacher_output = get_teacher_output(
-                    image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy, aggregation_parameter, aggregator=aggregator
-                )
+            
+            teacher_output = get_teacher_output(
+                image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy, aggregation_parameter, aggregator=aggregator
+            )
 
             loss, _ = unic_loss(
                 student_output,
@@ -501,6 +515,10 @@ def train_one_epoch(
         grad_norms = None
         if fp16_scaler is None:
             loss.backward()
+            # ? Verifica se i gradienti dell'aggregator vengono calcolati
+            print("Aggregator receives gradients:",
+                  any(p.grad is not None for p in aggregator.parameters() if p.requires_grad))
+
             if args.clip_grad > 0:
                 grad_norms = utils.clip_gradients(model, args.clip_grad)
             optimizer.step()
@@ -553,6 +571,7 @@ def evaluate(
     header = "Test - Epoch: [{}/{}]".format(epoch, args.epochs)
 
     model.eval()
+    aggregator.eval()
 
     for it, sample in enumerate(
         metric_logger.log_every(data_loader, 10, header)

@@ -243,6 +243,7 @@ class TeacherAggregator(nn.Module):
         if not strategy:
             self.use_rab = self.use_abf = self.use_mean = False
             logger.info("No strategy specified: using identity fallback.")
+            return  
         else:
             self.use_rab  = "rab"  in strategy
             self.use_abf  = "abf"  in strategy
@@ -283,6 +284,7 @@ class TeacherAggregator(nn.Module):
 
     # ------------------------------------------------------------------
     def forward(self, cls_list, patch_list):
+        
         """
         Args
         ----
@@ -293,7 +295,11 @@ class TeacherAggregator(nn.Module):
         -------
         Dict[str, Tensor] con chiavi "cls" & "patch"
         """
-
+        if self.use_rab == self.use_abf == self.use_mean == False:
+            return {
+                "cls": cls_list,
+                "patch": patch_list
+            }
         # 1) Alignment
         if self.use_rab:
             cls_aligned   = self._align(cls_list,   self.rab_cls)

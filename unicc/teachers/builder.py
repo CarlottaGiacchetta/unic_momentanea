@@ -53,12 +53,7 @@ def _build_teacher(name):
         )
 
     ckpt_path = TEACHER_CFG[name]["ckpt_path"]
-    ckpt_key = TEACHER_CFG[name]["ckpt_key"]
-    finetuning_bands = TEACHER_CFG[name]["finetuning_bands"]
-    if finetuning_bands != 'all':
-        in_chans = 3
-    else:
-        in_chans = 12
+    ckpt_key = TEACHER_CFG[name]["ckpt_key"]    
 
     if not os.path.isfile(ckpt_path):
         raise ValueError("Invalid teacher model path: {}".format(ckpt_path))

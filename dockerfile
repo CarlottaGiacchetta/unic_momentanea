@@ -21,8 +21,7 @@ RUN  pip install torchgeo
 #
 
 
-CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/concat", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "[\"mean\"]"]
+CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/scheduledGiusto", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "[\"abf\", \"rab\", \"mean\"]", "--aggregation_scheduler", "True", "--aggregation_parameter", "{'alpha': 0.9, 'beta': 0.1}"]
 
-#, "[\"abf\", \"rab\", \"mean\"]", "--aggregation_scheduler", "True", "--aggregation_parameter", "{'alpha': 0.9, 'beta': 0.1}"]
 
 #CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--in_chans", "12", "--strategy", "[\"abf\", \"rab\", \"mean\"]", "--output_dir", "Distil12FusionStrategy/abf+rab+mean(0.50.5)", "--saveckpt_freq", "2", "--aggregation_scheduler", "False", "--aggregation_parameter", "{'alpha': 0.5, 'beta': 0.5}"]
