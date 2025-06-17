@@ -339,7 +339,7 @@ def scheduler_aggregation_weights(epoch, aggregation_parameter):
     - Every 2 epochs, alpha increases by 0.1 and beta decreases by 0.1
     - Capped to alpha=0.9, beta=0.1
     """
-    step = min(epoch // 2, 8)  # step ? [0, 8] ? alpha ? [0.1, 0.9]
+    step = min(epoch // 5, 8)  # step ? [0, 8] ? alpha ? [0.1, 0.9]
     alpha = aggregation_parameter.get("alpha", 0.5)
     print('alpha: ', alpha)
     beta = aggregation_parameter.get("beta", 0.5)

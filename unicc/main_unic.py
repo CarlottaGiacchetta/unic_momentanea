@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import argparse
 import datetime
 import math
@@ -290,17 +291,23 @@ def main(args):
     logger.info("Loading teachers ...")
     teachers, teacher_ft_stats, teacher_dims = build_teachers(args.teachers)
 
-
-    aggregator = TeacherAggregator(teacher_dims, args.strategy).cuda()
-    
-    # Controlla se ha parametri che richiedono gradiente
-    has_trainable_params = any(p.requires_grad for p in aggregator.parameters())
-    
-    if has_trainable_params:
-        aggregator = nn.parallel.DistributedDataParallel(aggregator, device_ids=[args.gpu], find_unused_parameters=True)
-        logger.info("Wrapped aggregator in DDP.")
+    if not args.strategy:
+        aggregator = None
+        has_trainable_params = None
+        print('skippo costruzione aggregator')
     else:
-      logger.info("Using strategy - identity fallback")
+        print('costruisco aggregator')
+        aggregator = TeacherAggregator(teacher_dims, args.strategy).cuda()
+    
+        # Controlla se ha parametri che richiedono gradiente
+        has_trainable_params = any(p.requires_grad for p in aggregator.parameters())
+        
+        if has_trainable_params:
+            print('has trainable params')
+            aggregator = nn.parallel.DistributedDataParallel(aggregator, device_ids=[args.gpu], find_unused_parameters=True)
+            logger.info("Wrapped aggregator in DDP.")
+        else:
+            logger.info("Using strategy - identity fallback")
 
 
     logger.info("Creating student model")
@@ -316,7 +323,8 @@ def main(args):
           save_file_path=os.path.join(args.output_dir, "params_groups.txt"),
       )
       
-    if has_trainable_params:          # True se strategy ha "rab" o "abf"
+    if has_trainable_params and args.strategy:          # True se strategy ha "rab" o "abf"
+        print('skippo params groups.append aggregator')
         param_groups.append(
             {
                 "params": [p for p in aggregator.parameters()
@@ -457,7 +465,11 @@ def train_one_epoch(
     header = "Training - Epoch: [{}/{}]".format(epoch, args.epochs)
 
     model.train()
-    aggregator.train()
+    if aggregator:
+        print('presente laggregator')
+        aggregator.train()
+    else:
+        print('non ho aggregator')
 
     for it, sample in enumerate(
         metric_logger.log_every(
@@ -571,7 +583,8 @@ def evaluate(
     header = "Test - Epoch: [{}/{}]".format(epoch, args.epochs)
 
     model.eval()
-    aggregator.eval()
+    if aggregator:
+        aggregator.eval()
 
     for it, sample in enumerate(
         metric_logger.log_every(data_loader, 10, header)
