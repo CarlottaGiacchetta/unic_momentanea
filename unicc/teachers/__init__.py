@@ -63,9 +63,12 @@ def get_teacher_output(
                         std_ema=teacher_ft_stats[tname][ttype]["std"],
                         ema_momentum=teacher_ft_stat_ema_momentum,
                     )
-                    if tout.ndim == 2:
-                        tout = tout.unsqueeze(1)  # (B, C) ? (B, 1, C)
-        
+                    if tout.ndim == 3 and strategy == None:
+                        tout = tout.squeeze(1)  # (B, C) ? (B, 1, C)
+                        
+                    if tout.ndim == 2 and strategy != None:
+                        tout = tout.unsqueeze(1)
+                        
                     if use_mean or use_abf:
                         if ttype == "cls":
                             cls_list.append(tout)
@@ -73,7 +76,7 @@ def get_teacher_output(
                             patch_list.append(tout)
         
                     teacher_output[tname][ttype] = tout
-
+                    
     # ---------------------------------------------
     # 2.  Fusione con l’aggregator (grad-on)
     # ---------------------------------------------

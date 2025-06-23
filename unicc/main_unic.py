@@ -57,6 +57,13 @@ def get_args():
         default="{'std': 0.02}",
         help="Dictionary of keyword arguments for the ladder of projector.",
     )
+    parser.add_argument(
+        "--use_lp",
+        type=utils.bool_flag,  # oppure `type=bool` se non usi la tua `bool_flag`
+        default=True,
+        help="Whether to use Ladder of Projection modules.",
+    )
+
 
     parser.add_argument(
         "--teachers",
@@ -394,6 +401,11 @@ def main(args):
         if args.aggregation_scheduler:
             aggregation_parameter = utils.scheduler_aggregation_weights(epoch, aggregation_parameter)
             logger.info(f"aggregation_parameter = {aggregation_parameter}")
+            
+        else:
+            aggregation_parameter = args.aggregation_parameter
+        
+        print(aggregation_parameter)
 
 
         train_one_epoch(
@@ -501,14 +513,14 @@ def train_one_epoch(
         }
 
         with torch.cuda.amp.autocast(fp16_scaler is not None):
-            student_output = model(image)
-            
+            student_output = model(image)           
 
             
             teacher_output = get_teacher_output(
                 image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy, aggregation_parameter, aggregator=aggregator
             )
-
+            
+            
             loss, _ = unic_loss(
                 student_output,
                 teacher_output,

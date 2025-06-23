@@ -221,6 +221,48 @@ def load_student_encoder_from_checkpoint(ckpt_fname, ckpt_key="model"):
     )
 
     return encoder, ckpt["epoch"]
+    
+    
+
+from typing import Dict, List
+from collections import defaultdict
+import torch
+import torch.nn as nn
+
+class IdentityLP(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        head_dims: Dict[str, int],
+        n_encoder_blocks: int,
+        which_blocks: List[int] = None,
+        hidden_dim: int = 768,
+        last_hidden_dim: int = 3072,
+        prenorm: bool = False,
+        midnorm: bool = False,
+        std: float = 0.02,
+    ):
+        super().__init__()
+        if which_blocks is None:
+            which_blocks = list(range(n_encoder_blocks))
+        self.which_blocks = which_blocks
+        self.head_dims = head_dims
+
+        # crea un linear per ogni head_dim
+        self.proj = nn.ModuleDict({
+            hname: nn.Linear(input_dim, head_dims[hname])
+            for hname in sorted(head_dims.keys())
+        })
+
+    def forward(
+        self, x_cls: List[torch.Tensor], x_patch: List[torch.Tensor]
+    ) -> Dict[str, Dict[str, torch.Tensor]]:
+        out = defaultdict(dict)
+        for hname in sorted(self.head_dims.keys()):
+            out[hname]["cls"] = self.proj[hname](x_cls[-1])
+            out[hname]["patch"] = self.proj[hname](x_patch[-1])
+        return out
+
 
 
 def build_student_from_args(args):
@@ -239,15 +281,29 @@ def build_student_from_args(args):
         head_dims={
             tname: TEACHER_CFG[tname.strip()]["num_features"] for tname in args.teachers
         }
+    
+    print('\n\n\n\n')    
     print(head_dims)
-
-    lp_args = eval(args.lp_args)
-    lp = LP(
+    print(encoder.embed_dim)
+    
+    if args.use_lp:
+        lp_args = eval(args.lp_args)
+        lp = LP(
+            input_dim=encoder.embed_dim,
+            head_dims=head_dims,
+            n_encoder_blocks=encoder.n_blocks,
+            **lp_args,
+        )
+    else:
+      print('non uso lp, faccio identita')
+      lp_args = eval(args.lp_args)
+      lp = IdentityLP(
         input_dim=encoder.embed_dim,
         head_dims=head_dims,
         n_encoder_blocks=encoder.n_blocks,
         **lp_args,
-    )
+      )
+      
 
     model = UNIC(encoder, lp, args.in_chans)
 
