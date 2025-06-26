@@ -42,7 +42,7 @@ RUN  pip install torchgeo
 #SCALEMAE
 
 #scheduled
-# CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/scheduled9", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "[\"abf\", \"rab\", \"mean\"]", "--aggregation_scheduler", "True", "--aggregation_parameter", "{'alpha': 0.9, 'beta': 0.1}"]
+CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/scheduled9Large", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "[\"abf\", \"rab\", \"mean\"]", "--aggregation_scheduler", "True", "--aggregation_parameter", "{'alpha': 0.9, 'beta': 0.1}"]
 
 
 #static
@@ -52,11 +52,11 @@ RUN  pip install torchgeo
 # CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/abfrab", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "[\"abf\", \"rab\"]", "--epochs", "21"]
 
 #concat
-CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/concatMeanLarge", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "[\"mean\"]"]
+#CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/concatMeanLarge", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "[\"mean\"]"]
 
 
-#multiteacher no LP 
-#CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/MultiteachNoLP", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "", "--use_lp", "False"]
+#multiteacher 
+#CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/MultiteachLarge", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--strategy", "", "--use_lp", "True"]
 
 
 
