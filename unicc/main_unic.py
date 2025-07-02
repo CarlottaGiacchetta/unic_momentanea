@@ -40,6 +40,13 @@ def get_args():
         "See dinov2/models/vision_transformer.py for options.",
     )
     parser.add_argument(
+        "--num_frames",
+        type=int,
+        default=3,
+        help="Architecture of the student model. "
+        "See dinov2/models/vision_transformer.py for options.",
+    )
+    parser.add_argument(
         "--patch_size",
         type=int,
         default=16,
@@ -72,10 +79,16 @@ def get_args():
         help="Comma-separated list of teacher names.",
     )
     parser.add_argument(
-        "--strategy",
+        "--Teacher_strategy",
         type=lambda s: eval(s) if s else [],  # converte stringa in lista
         default=[],
         help='Fusion strategy, e.g., \'["rab", "abf"]\''
+    )
+    parser.add_argument(
+        "--Student_strategy",
+        type=lambda s: eval(s) if s else [],  # converte stringa in lista
+        default=[],
+        help='Fusion strategy delle features dello student, e.g., \'["rab", "abf"]\''
     )
     parser.add_argument(
         "--aggregation_parameter",
@@ -264,7 +277,7 @@ def get_args():
 
     args = parser.parse_args()
 
-    args.teachers = sorted(args.teachers.split(","))
+    args.teachers = args.teachers.split(",")
     args.num_cpus = len(os.sched_getaffinity(0))
     try:
         args.aggregation_parameter = ast.literal_eval(args.aggregation_parameter)
@@ -298,13 +311,13 @@ def main(args):
     logger.info("Loading teachers ...")
     teachers, teacher_ft_stats, teacher_dims = build_teachers(args.teachers)
 
-    if not args.strategy:
+    if not args.Teacher_strategy:
         aggregator = None
         has_trainable_params = None
         print('skippo costruzione aggregator')
     else:
         print('costruisco aggregator')
-        aggregator = TeacherAggregator(teacher_dims, args.strategy).cuda()
+        aggregator = TeacherAggregator(teacher_dims, args.Teacher_strategy).cuda()
     
         # Controlla se ha parametri che richiedono gradiente
         has_trainable_params = any(p.requires_grad for p in aggregator.parameters())
@@ -330,7 +343,7 @@ def main(args):
           save_file_path=os.path.join(args.output_dir, "params_groups.txt"),
       )
       
-    if has_trainable_params and args.strategy:          # True se strategy ha "rab" o "abf"
+    if has_trainable_params and args.Teacher_strategy:          # True se strategy ha "rab" o "abf"
         print('skippo params groups.append aggregator')
         param_groups.append(
             {
@@ -517,7 +530,7 @@ def train_one_epoch(
 
             
             teacher_output = get_teacher_output(
-                image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.strategy, aggregation_parameter, aggregator=aggregator
+                image, teachers, teacher_ft_stats, args.tnorm_ema_schedule[it], args.Teacher_strategy, aggregation_parameter, aggregator=aggregator
             )
             
             
@@ -608,7 +621,7 @@ def evaluate(
         target = target.cuda(non_blocking=True)
 
         student_output = model(image)
-        teacher_output = get_teacher_output(image, teachers, teacher_ft_stats, 0.0, args.strategy, args.aggregation_parameter, aggregator)
+        teacher_output = get_teacher_output(image, teachers, teacher_ft_stats, 0.0, args.Teacher_strategy, args.aggregation_parameter, aggregator)
 
         metric_dict = {}
         unic_loss(

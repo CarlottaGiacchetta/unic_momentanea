@@ -1,42 +1,41 @@
 import math
 import os
 from collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Optional
+
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from dinov2.models import vision_transformer
+from dinov2.models import timesformer 
+from teachers.config import CONFIG
 
 
 class UNIC(nn.Module):
-    def __init__(self, encoder, lp, in_chans):
+    def __init__(self, encoder, lp, in_chans, strategy = 'split'):
         super().__init__()
         self.encoder = encoder
         self.lp = lp
         self.in_chans = in_chans
+        self.strategy = strategy
 
     def forward(self, image):
-        mean = torch.tensor([
-            360.6375, 438.3721, 614.0557, 588.4096, 942.7473,
-            1769.8485, 2049.4758, 2193.2920, 2235.4866, 2241.0911,
-            1568.2118, 997.7151
-        ]).view(1, 12, 1, 1)
-        
-        std = torch.tensor([
-            563.1734, 607.0269, 603.2968, 684.5688, 727.5784,
-            1087.4288, 1261.4303, 1369.3717, 1342.4904,
-            1294.3555, 1063.9198, 806.8846
-        ]).view(1, 12, 1, 1)
+        self.strategy = 'split'
 
 
         image = F.interpolate(image, size=(224, 224), mode='bilinear', align_corners=False)
 
         if self.in_chans == 9:
-            image = image[:, [1,2,3,4,5,6,7,10,11], :]
-            std = std[:, [1,2,3,4,5,6,7,10,11], :]
-            mean = mean[:, [1,2,3,4,5,6,7,10,11], :]
+            image = image[:, CONFIG['nove']['bands'], :]
+            std = CONFIG['nove']['std']
+            mean = CONFIG['nove']['mean']
+        
+        elif self.in_chans == 12:
+            image = image[:, CONFIG['all']['bands'], :]
+            std = CONFIG['all']['std']
+            mean = CONFIG['all']['mean']
         
 
         image = (image - mean.to(image.device)) / std.to(image.device)
@@ -45,13 +44,29 @@ class UNIC(nn.Module):
         
         output_cls = [x[:, 0, :]]
         output_patch = [x[:, 1 + num_register_tokens :, :]]
+        
+        
+        if isinstance(self.encoder.blocks[0], nn.ModuleList):
+            # chunked
+            for block_chunk in self.encoder.blocks:
+                for blk in block_chunk:
+                    x = blk(x)
+                    output_cls.append(x[:, 0, :])
+                    output_patch.append(x[:, 1 + num_register_tokens :, :])
+        else:
+            # not chunked
+            for blk in self.encoder.blocks:
+                x = blk(x)
+                output_cls.append(x[:, 0, :])
+                output_patch.append(x[:, 1 + num_register_tokens :, :])
+                
+        patch_tokens_split = None
+        if self.strategy == 'split':
+            B, N, D = output_patch[-1].shape
+            assert N % 3 == 0, f"Cannot split {N} tokens in 3 parts"
+            patch_tokens_split = output_patch[-1].reshape(B, 3, N // 3, D)  # [B,3,196,D]
 
-        for blk in self.encoder.blocks[0]:
-            x = blk(x)
-            output_cls.append(x[:, 0, :])
-            output_patch.append(x[:, 1 + num_register_tokens :, :])
-
-        out = self.lp(output_cls, output_patch)
+        out = self.lp(output_cls, output_patch, patch_tokens_split=patch_tokens_split, strategy=self.strategy)
         
 
         return out
@@ -63,6 +78,8 @@ class LP(nn.Module):
         input_dim: int,
         head_dims: Dict[str, int],
         n_encoder_blocks: int,
+        patch_tokens_split: Optional[torch.Tensor] = None,
+        strategy: str = None,
         which_blocks: List[int] = None,
         hidden_dim: int = 768,
         last_hidden_dim: int = 3072,
@@ -106,7 +123,7 @@ class LP(nn.Module):
                         "patch": _make_head(head_dims[hname]),
                     }
                 )
-                for hname in sorted(head_dims.keys())
+                for hname in head_dims.keys()
             }
         )
 
@@ -117,22 +134,30 @@ class LP(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def forward(
-        self, x_cls: List[torch.Tensor], x_patch: List[torch.Tensor]
+        self, x_cls: List[torch.Tensor], x_patch: List[torch.Tensor], patch_tokens_split: Optional[torch.Tensor] = None, strategy: str = None,
     ) -> Dict[str, Dict[str, torch.Tensor]]:
         out = defaultdict(dict)
+        
+        xc = 0  # inizializza accumulatore cls
+        xp = 0  # inizializza accumulatore patch
 
-        for hname, head_dict in self.heads.items():
-            xc = 0
-            xp = 0
-
+        for idx, (hname, head_dict) in enumerate(self.heads.items()):
+            
             for bix in self.which_blocks:
                 xc = xc + head_dict["cls"][bix](x_cls[bix + 1])
-                xp = xp + head_dict["patch"][bix](x_patch[bix + 1])
+
+                if strategy == "split":
+                    if bix == self.which_blocks[-1]:
+                        xp = head_dict["patch"][bix](patch_tokens_split[:, idx])
+                else:
+                    xp = xp + head_dict["patch"][bix](x_patch[bix + 1])
 
             out[hname]["cls"] = xc
             out[hname]["patch"] = xp
 
         return out
+        
+        
 
 
 class AdaptMLP(nn.Module):
@@ -194,13 +219,21 @@ class AdaptMLP(nn.Module):
 
 
 def _build_encoder_from_args(args):
-    return vision_transformer.get_model(
+    return timesformer.get_model(
+        arch=args.arch,
+        patch_size=args.patch_size,
+        drop_path_rate=args.drop_path_rate,
+        img_size=args.image_size,
+        in_chans=3,
+        num_frames=args.num_frames          
+    )
+    '''return vision_transformer.get_model(
         arch=args.arch,
         patch_size=args.patch_size,
         drop_path_rate=args.drop_path_rate,
         img_size=args.image_size,
         in_chans=args.in_chans
-    )
+    )'''
 
 
 def load_student_encoder_from_checkpoint(ckpt_fname, ckpt_key="model"):
@@ -251,14 +284,14 @@ class IdentityLP(nn.Module):
         # crea un linear per ogni head_dim
         self.proj = nn.ModuleDict({
             hname: nn.Linear(input_dim, head_dims[hname])
-            for hname in sorted(head_dims.keys())
+            for hname in head_dims.keys()
         })
 
     def forward(
         self, x_cls: List[torch.Tensor], x_patch: List[torch.Tensor]
     ) -> Dict[str, Dict[str, torch.Tensor]]:
         out = defaultdict(dict)
-        for hname in sorted(self.head_dims.keys()):
+        for hname in self.head_dims.keys():
             out[hname]["cls"] = self.proj[hname](x_cls[-1])
             out[hname]["patch"] = self.proj[hname](x_patch[-1])
         return out
@@ -270,8 +303,8 @@ def build_student_from_args(args):
     encoder = _build_encoder_from_args(args)
 
     from teachers import TEACHER_CFG
-    print('check nel file unic buildstudent bla bla', args.strategy)
-    if "abf" in args.strategy or "mean" in args.strategy:
+    print('check nel file unic buildstudent bla bla', args.Teacher_strategy)
+    if "abf" in args.Teacher_strategy or "mean" in args.Teacher_strategy:
         head_dims = {
             "mergedFeatures": max([TEACHER_CFG[tname]["num_features"] for tname in args.teachers])  # o metti a mano il valore corretto
         }
@@ -284,7 +317,7 @@ def build_student_from_args(args):
     
     print('\n\n\n\n')    
     print(head_dims)
-    print(encoder.embed_dim)
+    #print(encoder.embed_dim)
     
     if args.use_lp:
         lp_args = eval(args.lp_args)
@@ -305,7 +338,7 @@ def build_student_from_args(args):
       )
       
 
-    model = UNIC(encoder, lp, args.in_chans)
+    model = UNIC(encoder, lp, args.in_chans, args.Student_strategy)
 
     return model
 
