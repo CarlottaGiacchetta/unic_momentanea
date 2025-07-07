@@ -95,6 +95,8 @@ def cosine_loss(pred, target, avg=False):
 
 
 def smooth_l1_loss(pred, target, beta=1.0, avg=False):
+    if target.dim() == 3 and target.shape[1] == 1:
+        target = target.squeeze(1)
     loss = F.smooth_l1_loss(pred, target, reduction="none", beta=beta).mean(dim=-1)
 
     if avg:

@@ -22,7 +22,7 @@ class UNIC(nn.Module):
         self.strategy = strategy
 
     def forward(self, image):
-        self.strategy = 'split'
+        self.strategy = 'mean'
 
 
         image = F.interpolate(image, size=(224, 224), mode='bilinear', align_corners=False)
@@ -59,14 +59,38 @@ class UNIC(nn.Module):
                 x = blk(x)
                 output_cls.append(x[:, 0, :])
                 output_patch.append(x[:, 1 + num_register_tokens :, :])
-                
-        patch_tokens_split = None
-        if self.strategy == 'split':
-            B, N, D = output_patch[-1].shape
-            assert N % 3 == 0, f"Cannot split {N} tokens in 3 parts"
-            patch_tokens_split = output_patch[-1].reshape(B, 3, N // 3, D)  # [B,3,196,D]
+        
+        ciao = True
+        
+        if ciao:   
+            patch_tokens_split = None
+            B, N, D = output_patch[-1].shape           # N = T * num_patches
+            num_patches = self.encoder.num_patches     # 196 se 224/16
+            
+            T = N // num_patches                       # numero frame
+            
+            if self.strategy == "split":
+                # [B, T, 196, D]
+                patch_tokens_split = output_patch[-1].reshape(B, T, num_patches, D)
+            
+            elif self.strategy == "mean":
+                # Fai la media T?1 per TUTTI i livelli
+                for i, p in enumerate(output_patch):
+                    B, N, D = p.shape
+                    num_patches = self.encoder.num_patches          # 196
+                    T = N // num_patches                            # 3
+                    output_patch[i] = p.reshape(B, T, num_patches, D).mean(dim=1)
+    
+            out = self.lp(
+                    output_cls,
+                    output_patch,
+                    patch_tokens_split=patch_tokens_split,
+                    strategy=self.strategy,
+            )
+            
+        else:
+            out = self.lp(output_cls, output_patch)
 
-        out = self.lp(output_cls, output_patch, patch_tokens_split=patch_tokens_split, strategy=self.strategy)
         
 
         return out
@@ -134,14 +158,18 @@ class LP(nn.Module):
                     nn.init.constant_(m.bias, 0)
 
     def forward(
-        self, x_cls: List[torch.Tensor], x_patch: List[torch.Tensor], patch_tokens_split: Optional[torch.Tensor] = None, strategy: str = None,
+            self,
+            x_cls:  List[torch.Tensor],
+            x_patch: List[torch.Tensor],
+            *,
+            patch_tokens_split: Optional[torch.Tensor] = None,
+            strategy: str = None,
     ) -> Dict[str, Dict[str, torch.Tensor]]:
         out = defaultdict(dict)
         
-        xc = 0  # inizializza accumulatore cls
-        xp = 0  # inizializza accumulatore patch
 
         for idx, (hname, head_dict) in enumerate(self.heads.items()):
+            xc, xp = 0, 0 
             
             for bix in self.which_blocks:
                 xc = xc + head_dict["cls"][bix](x_cls[bix + 1])
@@ -219,6 +247,7 @@ class AdaptMLP(nn.Module):
 
 
 def _build_encoder_from_args(args):
+    
     return timesformer.get_model(
         arch=args.arch,
         patch_size=args.patch_size,
@@ -227,7 +256,8 @@ def _build_encoder_from_args(args):
         in_chans=3,
         num_frames=args.num_frames          
     )
-    '''return vision_transformer.get_model(
+    '''
+    return vision_transformer.get_model(
         arch=args.arch,
         patch_size=args.patch_size,
         drop_path_rate=args.drop_path_rate,

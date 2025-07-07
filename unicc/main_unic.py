@@ -239,7 +239,7 @@ def get_args():
     )
     parser.add_argument(
         "--transform",
-        default=False,
+        default=True,
         type=bool,
         help="Do augmentations",
     )

@@ -112,6 +112,7 @@ def carica_dati(args, setup = "fit"):
             K.RandomVerticalFlip(p=0.5),
             K.RandomRotation(degrees=90.0, p=0.5)
         ]
+        print('faccio aug')
 
         if args.fintuning_bands == "rgb":
             transforms.append(K.RandomGrayscale(p=0.05))
@@ -119,6 +120,7 @@ def carica_dati(args, setup = "fit"):
 
     else: 
         train_transform = None
+        print('no aug ')
     
 
     dm = CustomBigEarthNetDataModule(

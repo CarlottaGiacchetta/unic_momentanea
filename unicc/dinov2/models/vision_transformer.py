@@ -419,9 +419,9 @@ def get_model(arch="vit_base", **kwargs):
                     new_conv.bias.zero_()
 
                 # copia i pesi RGB nei canali 1 (B02), 2 (B03), 3 (B04)
-                new_conv.weight[:, 0, :, :] = old_weight[:, 2, :, :]  # B02 = Blue
+                new_conv.weight[:, 0, :, :] = old_weight[:, 0, :, :]  # B02 = Blue
                 new_conv.weight[:, 1, :, :] = old_weight[:, 1, :, :]  # B03 = Green
-                new_conv.weight[:, 2, :, :] = old_weight[:, 0, :, :]  # B04 = Red
+                new_conv.weight[:, 2, :, :] = old_weight[:, 2, :, :]  # B04 = Red
                 
                 '''new_conv.weight[:, 1, :, :] = old_weight[:, 2, :, :]  # B02 = Blue
                 new_conv.weight[:, 2, :, :] = old_weight[:, 1, :, :]  # B03 = Green
