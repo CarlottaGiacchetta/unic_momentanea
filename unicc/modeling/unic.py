@@ -29,7 +29,7 @@ class UNIC(nn.Module):
         self.num_frames = num_frames
 
     def forward(self, image):
-        logger.info('uso la strategia ', self.strategy)
+        #logger.info('uso la strategia ', self.strategy)
 
         image = F.interpolate(image, size=(224, 224), mode='bilinear', align_corners=False)
 
@@ -65,7 +65,7 @@ class UNIC(nn.Module):
                 x = blk(x)
                 output_cls.append(x[:, 0, :])
                 output_patch.append(x[:, 1 + num_register_tokens :, :])
-        
+        #logger.info(self.encoder.__class__.__name__)
         if self.encoder.__class__.__name__.startswith("TimeSFormerStudent"):  
             patch_tokens_split = None
             B, N, D = output_patch[-1].shape           # N = T * num_patches
@@ -73,17 +73,21 @@ class UNIC(nn.Module):
             
             T = N // num_patches                       # numero frame
             
-            if self.strategy == "split":
+            if self.strategy[0] == "split":
+                logger.info('faccio split')
                 # [B, T, 196, D]
                 patch_tokens_split = output_patch[-1].reshape(B, T, num_patches, D)
             
-            elif self.strategy == "mean":
+            elif self.strategy[0] == "mean":
+                logger.info('faccio media')
                 # Fai la media T?1 per TUTTI i livelli
                 for i, p in enumerate(output_patch):
                     B, N, D = p.shape
                     num_patches = self.encoder.num_patches          # 196
                     T = N // num_patches                            # 3
                     output_patch[i] = p.reshape(B, T, num_patches, D).mean(dim=1)
+            else:
+                logger.info("nessuna strategia", self.strategy[0])
     
             out = self.lp(
                     output_cls,
@@ -92,7 +96,7 @@ class UNIC(nn.Module):
                     strategy=self.strategy,
             )
             
-        else:
+        elif self.encoder.__class__.__name__.startswith("DinoVisionTransformer"):
             out = self.lp(output_cls, output_patch)
 
         
@@ -339,6 +343,7 @@ class IdentityLP(nn.Module):
 def build_student_from_args(args):
 
     encoder = _build_encoder_from_args(args)
+    
 
     from teachers import TEACHER_CFG
     print('check nel file unic buildstudent bla bla', args.Teacher_strategy)

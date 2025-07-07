@@ -57,7 +57,7 @@ RUN  pip install torchgeo
 
 
 #multiteacher 
-CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/MultiteachTimeTiny", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo", "--Teacher_strategy", "", "--use_lp", "True"]
+CMD ["python", "unicc/main_unic.py", "--batch_size", "128", "--data_dir", "dati", "--arch", "time_tiny", "--saveckpt_freq", "2", "--in_chans", "3", "--output_dir", "ScalemaeDistill9/ELIMINAAAAAA", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo", "--Teacher_strategy", "", "--Student_strategy", "[\"mean\"]", "--use_lp", "True"]
 
 
 
