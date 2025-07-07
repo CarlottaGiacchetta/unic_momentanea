@@ -11,28 +11,34 @@ import torch.nn.functional as F
 from dinov2.models import vision_transformer
 from dinov2.models import timesformer 
 from teachers.config import CONFIG
+from dinov2.logging import setup_logging, ExternalLogger, MetricLogger
+import logging
+logger = logging.getLogger()
 
 
 class UNIC(nn.Module):
-    def __init__(self, encoder, lp, in_chans, strategy = 'split'):
+    def __init__(self, encoder, lp, in_chans, strategy = 'split', num_frames = 3):
         super().__init__()
         self.encoder = encoder
+        logger.info(self.encoder.__class__.__name__)
+        if self.encoder.__class__.__name__.startswith("TimeSFormerStudent"):
+            logger.info("YESSS")
         self.lp = lp
         self.in_chans = in_chans
         self.strategy = strategy
+        self.num_frames = num_frames
 
     def forward(self, image):
-        self.strategy = 'mean'
-
+        logger.info('uso la strategia ', self.strategy)
 
         image = F.interpolate(image, size=(224, 224), mode='bilinear', align_corners=False)
 
-        if self.in_chans == 9:
+        if self.num_frames == 3:
             image = image[:, CONFIG['nove']['bands'], :]
             std = CONFIG['nove']['std']
             mean = CONFIG['nove']['mean']
         
-        elif self.in_chans == 12:
+        elif self.num_frames == 4:
             image = image[:, CONFIG['all']['bands'], :]
             std = CONFIG['all']['std']
             mean = CONFIG['all']['mean']
@@ -60,9 +66,7 @@ class UNIC(nn.Module):
                 output_cls.append(x[:, 0, :])
                 output_patch.append(x[:, 1 + num_register_tokens :, :])
         
-        ciao = True
-        
-        if ciao:   
+        if self.encoder.__class__.__name__.startswith("TimeSFormerStudent"):  
             patch_tokens_split = None
             B, N, D = output_patch[-1].shape           # N = T * num_patches
             num_patches = self.encoder.num_patches     # 196 se 224/16
@@ -247,23 +251,27 @@ class AdaptMLP(nn.Module):
 
 
 def _build_encoder_from_args(args):
-    
-    return timesformer.get_model(
-        arch=args.arch,
-        patch_size=args.patch_size,
-        drop_path_rate=args.drop_path_rate,
-        img_size=args.image_size,
-        in_chans=3,
-        num_frames=args.num_frames          
-    )
-    '''
-    return vision_transformer.get_model(
+
+    if args.arch.startswith("vit"):
+        logger.info("creato vision transformer")
+        return vision_transformer.get_model(
         arch=args.arch,
         patch_size=args.patch_size,
         drop_path_rate=args.drop_path_rate,
         img_size=args.image_size,
         in_chans=args.in_chans
-    )'''
+        )
+    else:
+        logger.info("creato timesformer")
+        return timesformer.get_model(
+            arch=args.arch,
+            patch_size=args.patch_size,
+            drop_path_rate=args.drop_path_rate,
+            img_size=args.image_size,
+            in_chans=3,
+            num_frames=args.num_frames          
+    )
+    
 
 
 def load_student_encoder_from_checkpoint(ckpt_fname, ckpt_key="model"):
@@ -368,7 +376,7 @@ def build_student_from_args(args):
       )
       
 
-    model = UNIC(encoder, lp, args.in_chans, args.Student_strategy)
+    model = UNIC(encoder, lp, args.in_chans, args.Student_strategy, args.num_frames)
 
     return model
 

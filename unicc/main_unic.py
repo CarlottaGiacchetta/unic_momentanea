@@ -35,9 +35,9 @@ def get_args():
     parser.add_argument(
         "--arch",
         type=str,
-        default="vit_base",
+        default="vit_base", #or time_tiny
         help="Architecture of the student model. "
-        "See dinov2/models/vision_transformer.py for options.",
+        "See dinov2/models/vision_transformer.py for options. See dinov2/models/timesformer.py for options.",
     )
     parser.add_argument(
         "--num_frames",
