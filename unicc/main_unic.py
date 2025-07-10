@@ -29,6 +29,8 @@ from Dataset import carica_dati
 logger = logging.getLogger()
 
 
+
+
 def get_args():
     parser = argparse.ArgumentParser()
 
@@ -484,6 +486,7 @@ def train_one_epoch(
 ):
     logger.info("-" * 50)
     logger.info("Starting training epoch {}".format(epoch))
+    logger.info(torch.cuda.memory_summary())
 
     metrics_file = os.path.join(args.output_dir, "metrics_training.json")
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)

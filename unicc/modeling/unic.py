@@ -9,11 +9,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from dinov2.models import vision_transformer
-from dinov2.models import timesformer 
+from timesformer import timesformer 
 from teachers.config import CONFIG
 from dinov2.logging import setup_logging, ExternalLogger, MetricLogger
 import logging
+from einops import rearrange, reduce, repeat
 logger = logging.getLogger()
+
 
 
 class UNIC(nn.Module):
@@ -21,7 +23,7 @@ class UNIC(nn.Module):
         super().__init__()
         self.encoder = encoder
         logger.info(self.encoder.__class__.__name__)
-        if self.encoder.__class__.__name__.startswith("TimeSFormerStudent"):
+        if self.encoder.__class__.__name__.startswith("TimeSformer"):
             logger.info("YESSS")
         self.lp = lp
         self.in_chans = in_chans
@@ -43,16 +45,85 @@ class UNIC(nn.Module):
             std = CONFIG['all']['std']
             mean = CONFIG['all']['mean']
         
+        elif self.num_frames == 1:
+            if self.in_chans == 9:
+                image = image[:, CONFIG['nove']['bands'], :]
+                std = CONFIG['nove']['std']
+                mean = CONFIG['nove']['mean']
+        
 
         image = (image - mean.to(image.device)) / std.to(image.device)
         
-        x, num_register_tokens = self.encoder.prepare_tokens_with_masks(image)
+        if self.encoder.__class__.__name__.startswith("TimeSformer"): 
+            B, C_all, H, W = image.shape
+            image = image.view(B, self.in_chans, self.num_frames, H, W)
+
+            x, T, W = self.encoder.model.patch_embed(image)
+            cls_tokens = self.encoder.model.cls_token.expand(x.size(0), -1, -1)
+            x = torch.cat((cls_tokens, x), dim=1)
+    
+            ## resizing the positional embeddings in case they don't match the input at inference
+            if x.size(1) != self.encoder.model.pos_embed.size(1):
+                pos_embed = self.encoder.model.pos_embed
+                cls_pos_embed = pos_embed[0,0,:].unsqueeze(0).unsqueeze(1)
+                other_pos_embed = pos_embed[0,1:,:].unsqueeze(0).transpose(1, 2)
+                P = int(other_pos_embed.size(2) ** 0.5)
+                H = x.size(1) // W
+                other_pos_embed = other_pos_embed.reshape(1, x.size(2), P, P)
+                new_pos_embed = F.interpolate(other_pos_embed, size=(H, W), mode='nearest')
+                new_pos_embed = new_pos_embed.flatten(2)
+                new_pos_embed = new_pos_embed.transpose(1, 2)
+                new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
+                x = x + new_pos_embed
+            else:
+                x = x + self.encoder.model.pos_embed
+            x = self.encoder.model.pos_drop(x)
+    
+    
+            ## Time Embeddings
+            if self.encoder.model.attention_type != 'space_only':
+                cls_tokens = x[:B, 0, :].unsqueeze(1)
+                x = x[:,1:]
+                x = rearrange(x, '(b t) n m -> (b n) t m',b=B,t=T)
+                ## Resizing time embeddings in case they don't match
+                if T != self.encoder.model.time_embed.size(1):
+                    time_embed = self.encoder.model.time_embed.transpose(1, 2)
+                    new_time_embed = F.interpolate(time_embed, size=(T), mode='nearest')
+                    new_time_embed = new_time_embed.transpose(1, 2)
+                    x = x + new_time_embed
+                else:
+                    x = x + self.encoder.model.time_embed
+                x = self.encoder.model.time_drop(x)
+                x = rearrange(x, '(b n) t m -> b (n t) m',b=B,t=T)
+                x = torch.cat((cls_tokens, x), dim=1)
+            
+            output_cls   = [x[:, 0]]          # prima del primo block
+            output_patch = [x[:, 1:]]         # shape [B, T*patches, D]
+    
+            ## Attention blocks
+            for blk in self.encoder.model.blocks:
+                x = blk(x, B, T, W)
+                output_cls.append(x[:, 0])
+                output_patch.append(x[:, 1:])
+            num_register_tokens = 0  
+            
+        else:
+            x, num_register_tokens = self.encoder.prepare_tokens_with_masks(image)
         
-        output_cls = [x[:, 0, :]]
-        output_patch = [x[:, 1 + num_register_tokens :, :]]
+            output_cls = [x[:, 0, :]]
+            output_patch = [x[:, 1 + num_register_tokens :, :]]
+            
+            for blk in self.encoder.blocks:
+                x = blk(x)
+                output_cls.append(x[:, 0, :])
+                output_patch.append(x[:, 1 + num_register_tokens :, :])
         
         
+
+        
+        '''
         if isinstance(self.encoder.blocks[0], nn.ModuleList):
+            print("CASO CHUNKED")
             # chunked
             for block_chunk in self.encoder.blocks:
                 for blk in block_chunk:
@@ -60,26 +131,42 @@ class UNIC(nn.Module):
                     output_cls.append(x[:, 0, :])
                     output_patch.append(x[:, 1 + num_register_tokens :, :])
         else:
-            # not chunked
-            for blk in self.encoder.blocks:
-                x = blk(x)
-                output_cls.append(x[:, 0, :])
-                output_patch.append(x[:, 1 + num_register_tokens :, :])
+            if self.encoder.__class__.__name__.startswith("TimeSFormer"):
+                # Calcola B, T, W
+                B = x.shape[0]
+                num_patches = self.encoder.num_patches
+                N = x.shape[1] - 1  # exclude CLS
+                T = N // num_patches
+                W = int(num_patches ** 0.5)
+        
+                for blk in self.encoder.blocks:
+                    x = blk(x, B, T, W)
+                    output_cls.append(x[:, 0, :])
+                    output_patch.append(x[:, 1 + num_register_tokens :, :])
+            else:
+           
+                # Standard ViT
+                for blk in self.encoder.blocks:
+                    x = blk(x)
+                    output_cls.append(x[:, 0, :])
+                    output_patch.append(x[:, 1 + num_register_tokens :, :])
+        '''
+
+
         #logger.info(self.encoder.__class__.__name__)
-        if self.encoder.__class__.__name__.startswith("TimeSFormerStudent"):  
+        if self.encoder.__class__.__name__.startswith("TimeSformer"):  
             patch_tokens_split = None
             B, N, D = output_patch[-1].shape           # N = T * num_patches
-            num_patches = self.encoder.num_patches     # 196 se 224/16
             
-            T = N // num_patches                       # numero frame
-            
+        
             if self.strategy[0] == "split":
-                logger.info('faccio split')
+                #logger.info('faccio split')
                 # [B, T, 196, D]
+                num_patches = self.encoder.num_patches
                 patch_tokens_split = output_patch[-1].reshape(B, T, num_patches, D)
             
             elif self.strategy[0] == "mean":
-                logger.info('faccio media')
+                #logger.info('faccio media')
                 # Fai la media T?1 per TUTTI i livelli
                 for i, p in enumerate(output_patch):
                     B, N, D = p.shape
@@ -93,11 +180,13 @@ class UNIC(nn.Module):
                     output_cls,
                     output_patch,
                     patch_tokens_split=patch_tokens_split,
-                    strategy=self.strategy,
+                    strategy=self.strategy[0],
             )
             
         elif self.encoder.__class__.__name__.startswith("DinoVisionTransformer"):
             out = self.lp(output_cls, output_patch)
+        else:
+            raise ValueError(f"Nessun match con il nome dell'encoder")
 
         
 
@@ -181,7 +270,6 @@ class LP(nn.Module):
             
             for bix in self.which_blocks:
                 xc = xc + head_dict["cls"][bix](x_cls[bix + 1])
-
                 if strategy == "split":
                     if bix == self.which_blocks[-1]:
                         xp = head_dict["patch"][bix](patch_tokens_split[:, idx])
@@ -269,11 +357,10 @@ def _build_encoder_from_args(args):
         logger.info("creato timesformer")
         return timesformer.get_model(
             arch=args.arch,
-            patch_size=args.patch_size,
-            drop_path_rate=args.drop_path_rate,
             img_size=args.image_size,
-            in_chans=3,
-            num_frames=args.num_frames          
+            patch_size=args.patch_size,
+            #drop_path_rate=args.drop_path_rate,
+            num_frames=args.num_frames         
     )
     
 

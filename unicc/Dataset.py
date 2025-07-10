@@ -112,6 +112,18 @@ def carica_dati(args, setup = "fit"):
             K.RandomVerticalFlip(p=0.5),
             K.RandomRotation(degrees=90.0, p=0.5)
         ]
+        '''
+        transforms = [
+            CustomLambda(min_max_fn),
+            K.RandomResizedCrop(size=(224,224), scale=(0.5,1.0), ratio=(0.75,1.33), p=0.8),
+            K.ColorJitter(0.4,0.4,0.4,0.1, p=0.8),
+            K.RandomGaussianBlur((3,3), (0.1,2.0), p=0.5),
+            K.RandomHorizontalFlip(p=0.5),
+            K.RandomVerticalFlip(p=0.5),
+            K.RandomRotation(90.0, p=0.5),
+            K.RandomPerspective(0.5, p=0.5)
+        ]'''
+
         print('faccio aug')
 
         if args.fintuning_bands == "rgb":

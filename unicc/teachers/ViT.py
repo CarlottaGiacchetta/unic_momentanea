@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+import copy
+
 
 import argparse
 from teachers.config import CONFIG
@@ -11,7 +13,7 @@ from teachers.vision_transformer import get_model
 from torchmetrics.classification import MultilabelAveragePrecision
 
 class ViT(pl.LightningModule):
-    def __init__(self, checkpoint_path, in_chans, finetuning_bands):
+    def __init__(self, checkpoint_path, in_chans, finetuning_bands, use_ema: bool = False, ema_momentum: float = 0.999):
         super().__init__()
         # Supporta sia Namespace che dict, e fallback se args è None
         self.save_hyperparameters()  # logs hyperparameters for reproducibility
@@ -22,7 +24,7 @@ class ViT(pl.LightningModule):
     
         
         self.encoder = get_model(
-            arch =  "vit_tiny",
+            arch =  "vit_large",
             patch_size = 16,
             drop_path_rate=0.0,
             img_size=224,
@@ -66,9 +68,34 @@ class ViT(pl.LightningModule):
 
         self.image_size = 224
 
+        # --- EMA support ----------------------------------------------------
+        self._is_ema = use_ema
+        if self._is_ema:
+            self._momentum = ema_momentum
+            # crea un nuovo modello identico e carica pesi
+            self._ema = get_model(
+                arch="vit_large",
+                patch_size=16,
+                drop_path_rate=0.0,
+                img_size=224,
+                in_chans=in_chans
+            ).eval()
+            self._ema.load_state_dict(self.encoder.state_dict())
+            for p in self._ema.parameters():
+                p.requires_grad = False
+    
+    # --------------------------------------------------------------------- #
+    @torch.no_grad()
+    def update_ema(self, student_encoder, momentum: float | None = None):
+        """Aggiorna i pesi _ema come EMA del modello passato (di solito lo student)."""
+        if not self._is_ema:
+            return
+        m = self._momentum if momentum is None else momentum
+        for p_ema, p_src in zip(self._ema.parameters(), student_encoder.parameters()):
+            p_ema.data.mul_(m).add_(p_src.data, alpha=1. - m)
+
+
     def forward(self, x):
-        if self.in_chans == 8:
-            x = x[:, [2,3,4,5,6,7,10,11], :, :]
         x = F.interpolate(x, size=(self.image_size, self.image_size), mode='bilinear', align_corners=False) # x: (B, 3, 120, 120) → (B, 3, 224, 224)
         x = (x - self.mean.to(x.device)) / self.std.to(x.device)
         features = self.encoder.forward_features(x)
@@ -79,8 +106,10 @@ class ViT(pl.LightningModule):
     
     
     def forward_features(self, x):
+
       x = F.interpolate(x, size=(self.image_size, self.image_size), mode='bilinear', align_corners=False)
       x = (x - self.mean.to(x.device)) / self.std.to(x.device)
+      
   
       # Forward raw features (prenorm, no masking, no register token)
       features = self.encoder.patch_embed(x)
@@ -106,6 +135,13 @@ class ViT(pl.LightningModule):
 
 def vit_tiny(checkpoint_path):
     model = ViT(checkpoint_path, in_chans=12, finetuning_bands='all')
+
+    model.eval()
+    model.to("cuda" if torch.cuda.is_available() else "cpu")
+    return model
+
+def ViT_large(checkpoint_path):
+    model = ViT(checkpoint_path, in_chans=9, finetuning_bands='nove', use_ema = True)
 
     model.eval()
     model.to("cuda" if torch.cuda.is_available() else "cpu")

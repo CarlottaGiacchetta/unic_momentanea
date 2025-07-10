@@ -3,7 +3,7 @@
 #from .vit_dbotft import dbotft_vitbase
 
 from teachers.ScaleMae import scalemae_RGB, scalemae_VEG, scalemae_GEO
-from teachers.ViT import ViT, ViT_RGB, ViT_VEG, ViT_GEO
+from teachers.ViT import ViT, ViT_RGB, ViT_VEG, ViT_GEO, ViT_large
 
 TEACHER_CFG = {
     "scalemae_rgb": {
@@ -66,10 +66,15 @@ TEACHER_CFG = {
         "ckpt_key": "model",
         "num_features": 192,
         "resolution": 224,
-        "finetuning_bands": "all"
-        
-
-        
+        "finetuning_bands": "all"        
+    },
+    "vit_large": {
+        "loader": ViT_large,
+        "ckpt_path": "/raid/home/rsde/cgiacchetta_unic/unic_momentanea/models/ViT_large/best-checkpoint.ckpt", 
+        "ckpt_key": "model",
+        "num_features": 1024,
+        "resolution": 224,
+        "finetuning_bands": "nove"        
     },
 
 }
