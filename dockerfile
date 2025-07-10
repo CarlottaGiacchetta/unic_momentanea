@@ -62,9 +62,9 @@ RUN  pip install torchgeo
 #multiteacher 
 #CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/Large/ELIMINAAAA", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo", "--Teacher_strategy", "", "--Student_strategy", "", "--use_lp", "True", "--transform", "True", "--num_frames", "1"]
 
-#CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/BaselineEMA", "--teachers", "vit_large", "--Teacher_strategy", "", "--transform", "True", "--num_frames", "1"]
+#CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/BaselineEMA", "--teachers", "vit_large", "--Teacher_strategy", "", "--transform", "True", "--Student_strategy", "[\"\"]", "--num_frames", "1"]
 
-CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "time_large", "--saveckpt_freq", "2", "--in_chans", "3", "--output_dir", "ScalemaeDistill9/TimeV4/MultiteacherTimeTiny", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo", "--Teacher_strategy", "", "--use_lp", "True", "--Student_strategy", "[\"split\"]", "--num_frames", "3"]
+CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/MultiteachEMA", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo,vit_large", "--Teacher_strategy", "", "--use_lp", "True", "--Student_strategy", "[\"\"]", "--num_frames", "1"]
 
 
 

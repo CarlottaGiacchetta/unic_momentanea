@@ -113,7 +113,7 @@ class UNIC(nn.Module):
             output_cls = [x[:, 0, :]]
             output_patch = [x[:, 1 + num_register_tokens :, :]]
             
-            for blk in self.encoder.blocks:
+            for blk in self.encoder.blocks[0]:
                 x = blk(x)
                 output_cls.append(x[:, 0, :])
                 output_patch.append(x[:, 1 + num_register_tokens :, :])
