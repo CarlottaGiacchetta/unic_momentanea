@@ -54,9 +54,9 @@ RUN  pip install torchgeo
 #concat
 #CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/concatMeanLargeAUG1", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--Teacher_strategy", "[\"mean\"]", "--transform", "True", "num_frames", "1"]
 
-#CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/concatMeanLargeEMA", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg,vit_large", "--Teacher_strategy", "[\"mean\"]", "--transform", "True", "--num_frames", "1"]
+CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/PretrainedConcatMeanLarge", "--teachers", "scalemae_geo,scalemae_rgb,scalemae_veg", "--Teacher_strategy", "[\"mean\"]", "--transform", "True", "--num_frames", "1", "--imagenet_pretrained", "True", "--patch_size", "14"]
 
-#CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_tiny", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/TimeV2/concatMeanTimeTiny", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo", "--Teacher_strategy", "[\"mean\"]", "--use_lp", "True", "--Student_strategy", "[\"mean\"]", "--num_frames", "3"]
+#CMD ["python", "unicc/main_unic.py", "--batch_size", "16", "--data_dir", "dati", "--arch", "time_large", "--saveckpt_freq", "2", "--in_chans", "3", "--output_dir", "ScalemaeDistill9/TimeV4/MultiteacherTimeLarge", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo", "--Teacher_strategy", "", "--use_lp", "True", "--Student_strategy", "[\"split\"]", "--num_frames", "3"]
 
 
 #multiteacher 
@@ -64,7 +64,7 @@ RUN  pip install torchgeo
 
 #CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/BaselineEMA", "--teachers", "vit_large", "--Teacher_strategy", "", "--transform", "True", "--Student_strategy", "[\"\"]", "--num_frames", "1"]
 
-CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/MultiteachEMA", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo,vit_large", "--Teacher_strategy", "", "--use_lp", "True", "--Student_strategy", "[\"\"]", "--num_frames", "1"]
+#CMD ["python", "unicc/main_unic.py", "--batch_size", "64", "--data_dir", "dati", "--arch", "vit_large", "--saveckpt_freq", "2", "--in_chans", "9", "--output_dir", "ScalemaeDistill9/MultiteachEMA", "--teachers", "scalemae_rgb,scalemae_veg,scalemae_geo,vit_large", "--Teacher_strategy", "", "--use_lp", "True", "--Student_strategy", "[\"\"]", "--num_frames", "1"]
 
 
 

@@ -41,6 +41,12 @@ def get_args():
         help="Architecture of the student model. "
         "See dinov2/models/vision_transformer.py for options. See dinov2/models/timesformer.py for options.",
     )
+    parser.add_argument("--imagenet_pretrained", 
+        type=bool,
+        default=True,
+        help="Se True, carica i pesi ImageNet di default per larch scelto",
+    )
+    
     parser.add_argument(
         "--num_frames",
         type=int,

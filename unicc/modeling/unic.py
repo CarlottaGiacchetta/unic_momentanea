@@ -17,6 +17,11 @@ from einops import rearrange, reduce, repeat
 logger = logging.getLogger()
 
 
+IMAGENET_URLS = {
+    "vit_small": "backbonePretrained/dinov2_vits14_reg4_pretrain.pth",
+    "vit_large": "backbonePretrained/dinov2_vitl14_reg4_pretrain.pth",
+}
+
 
 class UNIC(nn.Module):
     def __init__(self, encoder, lp, in_chans, strategy = 'split', num_frames = 3):
@@ -343,25 +348,54 @@ class AdaptMLP(nn.Module):
 
 
 def _build_encoder_from_args(args):
-
     if args.arch.startswith("vit"):
-        logger.info("creato vision transformer")
-        return vision_transformer.get_model(
-        arch=args.arch,
-        patch_size=args.patch_size,
-        drop_path_rate=args.drop_path_rate,
-        img_size=args.image_size,
-        in_chans=args.in_chans
+        encoder = vision_transformer.get_model(
+            arch=args.arch,
+            patch_size=16,  # così compatibile con teacher
+            img_size=args.image_size,
+            in_chans=args.in_chans,
+            drop_path_rate=args.drop_path_rate,
         )
+
+        if getattr(args, "imagenet_pretrained", False):
+            ckpt_path = IMAGENET_URLS["_".join(args.arch.split("_")[:2])]
+            logger.info(f"Loading DINOv2 from {ckpt_path}")
+
+            # ---------- 1) carica state_dict ----------
+            state_dict = torch.load(ckpt_path, map_location="cpu")
+            state_dict = state_dict["model"] if "model" in state_dict else state_dict
+
+            # ---------- 2) rimuovi pos_embed ----------
+            state_dict = {k: v for k, v in state_dict.items() if not k.startswith("pos_embed")}
+
+            # ---------- 3) adatta conv 3->N canali ----------
+            if args.in_chans != 3:
+                w = state_dict["patch_embed.proj.weight"]  # [out, 3, 14,14]
+                w_resized = torch.nn.functional.interpolate(
+                    w, size=(16,16), mode="bicubic", align_corners=False
+                )
+                w_new = torch.zeros(w_resized.size(0), args.in_chans, 16,16)
+                w_new[:, :3] = w_resized
+                state_dict["patch_embed.proj.weight"] = w_new
+
+            # ---------- 4) carica pesi ----------
+            missing, unexpected = encoder.load_state_dict(state_dict, strict=False)
+            logger.info(f"? DINOv2 loaded | missing={len(missing)} unexpected={len(unexpected)}")
+
     else:
-        logger.info("creato timesformer")
-        return timesformer.get_model(
+        encoder = timesformer.get_model(
             arch=args.arch,
             img_size=args.image_size,
             patch_size=args.patch_size,
-            #drop_path_rate=args.drop_path_rate,
-            num_frames=args.num_frames         
-    )
+            num_frames=args.num_frames,
+        )
+
+    return encoder
+
+
+
+
+    
     
 
 
@@ -372,6 +406,7 @@ def load_student_encoder_from_checkpoint(ckpt_fname, ckpt_key="model"):
     ckpt = torch.load(ckpt_fname, "cpu")
 
     encoder = _build_encoder_from_args(ckpt["args"])
+
 
     state_dict = ckpt.get(ckpt_key, ckpt)
     encoder.load_state_dict(
